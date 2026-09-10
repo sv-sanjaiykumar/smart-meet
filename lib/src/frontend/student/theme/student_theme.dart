@@ -2,16 +2,20 @@ import 'package:flutter/material.dart';
 
 abstract final class StudentColors {
   static const background = Color(0xFFF9FBFF);
+  static const backgroundDark = Color(0xFF0F172A);
   static const ink = Color(0xFF101318);
+  static const inkDark = Color(0xFFF8FAFC);
   static const mutedInk = Color(0xFF777B84);
+  static const mutedInkDark = Color(0xFF94A3B8);
   static const primary = Color(0xFF4B96F3);
   static const softBlue = Color(0xFFEAF4FF);
+  static const softBlueDark = Color(0xFF1E293B);
   static const cardBlue = Color(0xFFBFE0FC);
   static const cardPurple = Color(0xFFE4C7FF);
 }
 
 abstract final class StudentTheme {
-  static ThemeData theme() {
+  static ThemeData lightTheme() {
     final base = ThemeData.light(useMaterial3: true);
     return base.copyWith(
       scaffoldBackgroundColor: StudentColors.background,
@@ -24,14 +28,23 @@ abstract final class StudentTheme {
       textTheme: base.textTheme.apply(
         bodyColor: StudentColors.ink,
         displayColor: StudentColors.ink,
-        fontFamily: 'Arial',
       ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: Colors.white.withValues(alpha: 0.94),
-        indicatorColor: StudentColors.softBlue,
-        labelTextStyle: WidgetStateProperty.all(
-          const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
-        ),
+    );
+  }
+
+  static ThemeData darkTheme() {
+    final base = ThemeData.dark(useMaterial3: true);
+    return base.copyWith(
+      scaffoldBackgroundColor: StudentColors.backgroundDark,
+      colorScheme: base.colorScheme.copyWith(
+        primary: StudentColors.primary,
+        onPrimary: Colors.white,
+        surface: StudentColors.backgroundDark,
+        onSurface: StudentColors.inkDark,
+      ),
+      textTheme: base.textTheme.apply(
+        bodyColor: StudentColors.inkDark,
+        displayColor: StudentColors.inkDark,
       ),
     );
   }

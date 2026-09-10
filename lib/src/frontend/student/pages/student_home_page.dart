@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
+import '../../../../main.dart'; // Import themeService
 import '../models/meeting.dart';
+import '../services/storage_service.dart';
 import '../theme/student_theme.dart';
 import 'calendar_page.dart';
 import 'add_meeting_page.dart';
@@ -19,7 +21,23 @@ class StudentHomePage extends StatefulWidget {
 
 class _StudentHomePageState extends State<StudentHomePage> {
   int _selectedTab = 0;
-  final List<Meeting> meetings = dummyMeetings;
+  List<Meeting> meetings = [];
+  final StorageService _storageService = StorageService();
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadMeetings();
+  }
+
+  Future<void> _loadMeetings() async {
+    final loadedMeetings = await _storageService.getMeetings();
+    setState(() {
+      meetings = loadedMeetings;
+      _isLoading = false;
+    });
+  }
 
   Widget _getBody() {
     switch (_selectedTab) {
@@ -74,7 +92,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildNavItem(0, Icons.home_outlined, Icons.home),
-              _buildNavItem(1, Icons.calendar_month_outlined, Icons.calendar_month),
+              _buildNavItem(1, Icons.assignment_outlined, Icons.assignment),
               _buildNavItem(2, Icons.add, Icons.add),
               _buildNavItem(3, Icons.notifications_none, Icons.notifications),
               _buildNavItem(4, Icons.person_outline, Icons.person),
@@ -103,35 +121,46 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-  void _showRequestSheet(BuildContext context) {
-    showModalBottomSheet(
+  void _showRequestSheet(BuildContext context) async {
+    final result = await showModalBottomSheet<bool>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const RequestMeetingSheet(),
     );
+
+    if (result == true) {
+      _loadMeetings(); // Refresh the counts and list on the home page
+    }
   }
 
   String _destinationTitle(int index) {
-    const titles = ['Home', 'Your calendar', 'Create a meeting', 'Notifications', 'Your profile'];
+    const titles = ['Home', 'Request Monitoring', 'Create a meeting', 'Notifications', 'Your profile'];
     return titles[index];
   }
 
   Widget _buildHome(BuildContext context) {
-    return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 100), // Added bottom padding for nav bar
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildHeader(),
-          const SizedBox(height: 24),
-          _buildStats(),
-          const SizedBox(height: 28),
-          ...meetings.map((meeting) => Padding(
-            padding: const EdgeInsets.only(bottom: 24),
-            child: _buildMeetingCard(meeting),
-          )),
-        ],
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return RefreshIndicator(
+      onRefresh: _loadMeetings,
+      child: SingleChildScrollView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100), // Added bottom padding for nav bar
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 24),
+            _buildStats(),
+            const SizedBox(height: 28),
+            ...meetings.where((m) => m.status == MeetingStatus.accepted).map((meeting) => Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: _buildMeetingCard(meeting),
+            )),
+          ],
+        ),
       ),
     );
   }
@@ -158,13 +187,24 @@ class _StudentHomePageState extends State<StudentHomePage> {
             shape: BoxShape.circle,
             border: Border.all(color: StudentColors.primary.withValues(alpha: 0.2)),
           ),
-          child: const Icon(Icons.wb_sunny_outlined, color: StudentColors.primary, size: 24),
+          child: GestureDetector(
+            onTap: () => themeService.toggleTheme(),
+            child: Icon(
+              themeService.isDarkMode ? Icons.nightlight_outlined : Icons.wb_sunny_outlined,
+              color: StudentColors.primary,
+              size: 24,
+            ),
+          ),
         ),
       ],
     );
   }
 
   Widget _buildStats() {
+    final acceptedCount = meetings.where((m) => m.status == MeetingStatus.accepted).length.toString();
+    final rejectedCount = meetings.where((m) => m.status == MeetingStatus.rejected).length.toString();
+    final pendingCount = meetings.where((m) => m.status == MeetingStatus.pending).length.toString();
+
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
@@ -180,9 +220,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
       ),
       child: Row(
         children: [
-          _buildStatItem('3', 'Accepted', true),
-          _buildStatItem('2', 'Rejected', false),
-          _buildStatItem('1', 'Pending', false),
+          _buildStatItem(acceptedCount, 'Accepted', true),
+          _buildStatItem(rejectedCount, 'Rejected', false),
+          _buildStatItem(pendingCount, 'Pending', false),
         ],
       ),
     );
