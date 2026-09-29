@@ -1,7 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 
-import '../../../../main.dart'; // Import themeService
 import '../models/meeting.dart';
 import '../services/storage_service.dart';
 import '../theme/student_theme.dart';
@@ -143,11 +142,14 @@ class _StudentHomePageState extends State<StudentHomePage> {
     if (_isLoading) {
       return const Center(child: CircularProgressIndicator());
     }
+
+    final acceptedMeetings = meetings.where((m) => m.status == MeetingStatus.accepted).toList();
+
     return RefreshIndicator(
       onRefresh: _loadMeetings,
       child: SingleChildScrollView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100), // Added bottom padding for nav bar
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -155,10 +157,25 @@ class _StudentHomePageState extends State<StudentHomePage> {
             const SizedBox(height: 24),
             _buildStats(),
             const SizedBox(height: 28),
-            ...meetings.where((m) => m.status == MeetingStatus.accepted).map((meeting) => Padding(
-              padding: const EdgeInsets.only(bottom: 24),
-              child: _buildMeetingCard(meeting),
-            )),
+            if (acceptedMeetings.isEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: const Text(
+                  'No accepted meetings yet. Your requests will appear here once faculty responds.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: StudentColors.mutedInk),
+                ),
+              )
+            else
+              ...acceptedMeetings.map((meeting) => Padding(
+                padding: const EdgeInsets.only(bottom: 24),
+                child: _buildMeetingCard(meeting),
+              )),
           ],
         ),
       ),
@@ -179,21 +196,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
               const Text('Hey, Thoufik!', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
               const Text('Requests status..', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w400)),
             ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(color: StudentColors.primary.withValues(alpha: 0.2)),
-          ),
-          child: GestureDetector(
-            onTap: () => themeService.toggleTheme(),
-            child: Icon(
-              themeService.isDarkMode ? Icons.nightlight_outlined : Icons.wb_sunny_outlined,
-              color: StudentColors.primary,
-              size: 24,
-            ),
           ),
         ),
       ],

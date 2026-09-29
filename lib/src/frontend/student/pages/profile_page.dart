@@ -1,10 +1,25 @@
 import 'package:flutter/material.dart';
+
+import '../../../backend/auth_service.dart';
+import '../../login/login_page.dart';
 import '../theme/student_theme.dart';
 
 import 'settings_page.dart';
 
 class ProfilePage extends StatelessWidget {
   const ProfilePage({super.key});
+
+  Future<void> _logout(BuildContext context) async {
+    final authService = AuthService();
+    await authService.logout();
+
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -37,7 +52,13 @@ class ProfilePage extends StatelessWidget {
               },
             ),
             _buildProfileOption(context, Icons.help_outline, 'Help & Support'),
-            _buildProfileOption(context, Icons.logout, 'Logout', isDestructive: true),
+            _buildProfileOption(
+              context,
+              Icons.logout,
+              'Logout',
+              isDestructive: true,
+              onTap: () => _logout(context),
+            ),
           ],
         ),
       ),

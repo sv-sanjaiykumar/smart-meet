@@ -1,9 +1,23 @@
 import 'package:flutter/material.dart';
-import '../../../../main.dart';
+
+import '../../../backend/auth_service.dart';
+import '../../login/login_page.dart';
 import '../theme/student_theme.dart';
 
 class SettingsPage extends StatelessWidget {
   const SettingsPage({super.key});
+
+  Future<void> _logout(BuildContext context) async {
+    final authService = AuthService();
+    await authService.logout();
+
+    if (context.mounted) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginPage()),
+        (route) => false,
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -36,7 +50,6 @@ class SettingsPage extends StatelessWidget {
             subtitle: 'Push, Email notifications',
             onTap: () {},
           ),
-          _buildThemeToggle(context),
           const SizedBox(height: 24),
           _buildSectionHeader('Support & Privacy'),
           _buildSettingItem(
@@ -62,7 +75,7 @@ class SettingsPage extends StatelessWidget {
           ),
           const SizedBox(height: 32),
           TextButton(
-            onPressed: () {},
+            onPressed: () => _logout(context),
             child: const Text(
               'Sign Out',
               style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
@@ -126,46 +139,4 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildThemeToggle(BuildContext context) {
-    return ListenableBuilder(
-      listenable: themeService,
-      builder: (context, _) {
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
-          ),
-          child: ListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            leading: Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: StudentColors.softBlue,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Icon(
-                themeService.isDarkMode ? Icons.nightlight_outlined : Icons.wb_sunny_outlined,
-                color: StudentColors.primary,
-              ),
-            ),
-            title: const Text(
-              'Dark Mode',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-            ),
-            subtitle: const Text(
-              'Toggle application theme',
-              style: TextStyle(color: StudentColors.mutedInk, fontSize: 13),
-            ),
-            trailing: Switch(
-              value: themeService.isDarkMode,
-              onChanged: (value) => themeService.toggleTheme(),
-              activeColor: StudentColors.primary,
-            ),
-          ),
-        );
-      },
-    );
-  }
 }

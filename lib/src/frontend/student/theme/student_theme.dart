@@ -32,20 +32,4 @@ abstract final class StudentTheme {
     );
   }
 
-  static ThemeData darkTheme() {
-    final base = ThemeData.dark(useMaterial3: true);
-    return base.copyWith(
-      scaffoldBackgroundColor: StudentColors.backgroundDark,
-      colorScheme: base.colorScheme.copyWith(
-        primary: StudentColors.primary,
-        onPrimary: Colors.white,
-        surface: StudentColors.backgroundDark,
-        onSurface: StudentColors.inkDark,
-      ),
-      textTheme: base.textTheme.apply(
-        bodyColor: StudentColors.inkDark,
-        displayColor: StudentColors.inkDark,
-      ),
-    );
-  }
 }

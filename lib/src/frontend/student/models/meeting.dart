@@ -14,6 +14,7 @@ class Meeting {
   final bool isPinned;
   final String requestedAt;
   final String? denialReason;
+  final String? studentName;
 
   Meeting({
     required this.id,
@@ -27,6 +28,7 @@ class Meeting {
     this.isPinned = false,
     required this.requestedAt,
     this.denialReason,
+    this.studentName,
   });
 
   Color get cardColor => Color(cardColorValue);
@@ -43,6 +45,7 @@ class Meeting {
     'isPinned': isPinned,
     'requestedAt': requestedAt,
     'denialReason': denialReason,
+    'studentName': studentName,
   };
 
   factory Meeting.fromJson(Map<String, dynamic> json) => Meeting(
@@ -54,8 +57,9 @@ class Meeting {
     location: json['location'],
     status: MeetingStatus.values[json['status'] as int],
     cardColorValue: json['cardColorValue'] as int,
-    isPinned: json['isPinned'] as bool,
+    isPinned: json['isPinned'] ?? false,
     requestedAt: json['requestedAt'],
     denialReason: json['denialReason'],
+    studentName: json['studentName'],
   );
 }

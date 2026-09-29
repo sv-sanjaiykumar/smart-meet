@@ -30,6 +30,7 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
       cardColorValue: 0xFFFFFFFF,
       requestedAt: DateFormat('dd MMM, h:mm a').format(DateTime.now()),
       isPinned: false,
+      studentName: 'Student',
     );
 
     meetings.insert(0, newMeeting); // Add to the top
@@ -237,10 +238,24 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
 
   Widget _buildPurposeGrid() {
     final purposes = ['Academic', 'Project Discussion', 'Personal', 'Form Sign'];
-    return Wrap(
-      spacing: 20,
-      runSpacing: 16,
-      children: purposes.map((p) => _buildPurposeItem(p)).toList(),
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final itemWidth = (constraints.maxWidth - 20) / 2;
+
+        return Wrap(
+          spacing: 20,
+          runSpacing: 16,
+          children: purposes
+              .map(
+                (label) => SizedBox(
+                  width: itemWidth,
+                  child: _buildPurposeItem(label),
+                ),
+              )
+              .toList(),
+        );
+      },
     );
   }
 
@@ -248,25 +263,24 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
     bool isSelected = selectedPurpose == label;
     return GestureDetector(
       onTap: () => setState(() => selectedPurpose = label),
-      child: SizedBox(
-        width: MediaQuery.of(context).size.width / 2 - 40,
-        child: Row(
-          children: [
-            Icon(
-              isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
-              color: isSelected ? StudentColors.primary : Colors.grey,
-              size: 20,
-            ),
-            const SizedBox(width: 8),
-            Text(
+      child: Row(
+        children: [
+          Icon(
+            isSelected ? Icons.radio_button_checked : Icons.radio_button_off,
+            color: isSelected ? StudentColors.primary : Colors.grey,
+            size: 20,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
               label,
               style: TextStyle(
                 color: isSelected ? StudentColors.ink : Colors.grey[600],
                 fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
