@@ -10,32 +10,38 @@ void main() {
     SharedPreferences.setMockInitialValues({});
   });
 
-  test('starts empty and only shows persisted meetings created by the user', () async {
-    final service = LocalStorageService();
+  test(
+    'starts empty and only shows persisted meetings created by the user',
+    () async {
+      final service = LocalStorageService();
 
-    final meetings = await service.getMeetings();
-    expect(meetings, isEmpty);
+      final meetings = await service.getMeetings();
+      expect(meetings, isEmpty);
 
-    final meeting = Meeting(
-      id: 'demo_meeting_1',
-      facultyName: 'Prof. Lakshmanan',
-      facultyDept: 'Dept of CSE',
-      purpose: 'Project Discussion',
-      time: '12:30 PM',
-      location: 'TF-23',
-      status: MeetingStatus.pending,
-      cardColorValue: 0xFFBFE0FC,
-      isPinned: false,
-      requestedAt: '28 Sep, 10:00 AM',
-      studentName: 'Student 4',
-    );
+      final meeting = Meeting(
+        id: 'demo_meeting_1',
+        facultyName: 'Prof. Lakshmanan',
+        facultyDept: 'Dept of CSE',
+        purpose: 'Project Discussion',
+        time: '12:30 PM',
+        location: 'TF-23',
+        status: MeetingStatus.pending,
+        cardColorValue: 0xFFBFE0FC,
+        isPinned: false,
+        requestedAt: '28 Sep, 10:00 AM',
+        studentName: 'Student 4',
+      );
 
-    await service.addMeeting(meeting);
-    final saved = await service.getMeetings();
+      await service.addMeeting(meeting);
+      final saved = await service.getMeetings();
 
-    expect(saved.any((item) => item.id == meeting.id), isTrue);
-    expect(saved.firstWhere((item) => item.id == meeting.id).status, MeetingStatus.pending);
-  });
+      expect(saved.any((item) => item.id == meeting.id), isTrue);
+      expect(
+        saved.firstWhere((item) => item.id == meeting.id).status,
+        MeetingStatus.pending,
+      );
+    },
+  );
 
   test('updates a meeting status and keeps the change persisted', () async {
     final service = LocalStorageService();

@@ -46,3 +46,14 @@ app.*.map.json
 
 # Widget Preview related
 .widget_preview/
+
+# Local UI reference screenshots
+/Faculty home screen request pending.png
+/faculty handling request - ACCEPTED.png
+/faculty handling request - ALL.png
+/faculty handling request - NEW.png
+/faculty handling request - PENDING (1).png
+/faculty handling request - PENDING.png
+/faculty meeting history CANCELLED.png
+/faculty meeting history COMPLETED.png
+/Login/Register.jpg

@@ -3,6 +3,8 @@ import 'package:intl/intl.dart';
 
 import '../../../backend/local_storage_service.dart';
 import '../../student/models/meeting.dart';
+import 'staff_history_page.dart';
+import 'staff_requests_page.dart';
 
 class StaffHomePage extends StatefulWidget {
   const StaffHomePage({super.key});
@@ -15,6 +17,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
   final LocalStorageService _storageService = LocalStorageService();
   List<Meeting> _meetings = [];
   bool _isLoading = true;
+  int _selectedTab = 0;
 
   @override
   void initState() {
@@ -31,11 +34,16 @@ class _StaffHomePageState extends State<StaffHomePage> {
     });
   }
 
-  Future<void> _updateMeetingStatus(Meeting meeting, MeetingStatus status) async {
+  Future<void> _updateMeetingStatus(
+    Meeting meeting,
+    MeetingStatus status,
+  ) async {
     await _storageService.updateMeetingStatus(
       meeting.id,
       status,
-      status == MeetingStatus.accepted ? 'Accepted by faculty' : 'Rejected by faculty',
+      status == MeetingStatus.accepted
+          ? 'Accepted by faculty'
+          : 'Rejected by faculty',
     );
     await _loadMeetings();
   }
@@ -55,15 +63,29 @@ class _StaffHomePageState extends State<StaffHomePage> {
   @override
   Widget build(BuildContext context) {
     final upcomingMeetings = _meetings
-        .where((meeting) => meeting.status == MeetingStatus.accepted || meeting.status == MeetingStatus.pending)
+        .where(
+          (meeting) =>
+              meeting.status == MeetingStatus.accepted ||
+              meeting.status == MeetingStatus.pending,
+        )
         .toList();
-    final pendingRequests = _meetings.where((meeting) => meeting.status == MeetingStatus.pending).toList();
+    final pendingRequests = _meetings
+        .where((meeting) => meeting.status == MeetingStatus.pending)
+        .toList();
 
     return Scaffold(
       backgroundColor: const Color(0xFFF4F6FA),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
+            : _selectedTab == 2
+            ? StaffHistoryPage(meetings: _meetings, onRefresh: _loadMeetings)
+            : _selectedTab == 1
+            ? StaffRequestsPage(
+                meetings: _meetings,
+                onRefresh: _loadMeetings,
+                onStatusChanged: _updateMeetingStatus,
+              )
             : RefreshIndicator(
                 onRefresh: _loadMeetings,
                 child: SingleChildScrollView(
@@ -76,7 +98,11 @@ class _StaffHomePageState extends State<StaffHomePage> {
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         crossAxisAlignment: CrossAxisAlignment.center,
                         children: [
-                          const Icon(Icons.menu, size: 28, color: Colors.black87),
+                          const Icon(
+                            Icons.menu,
+                            size: 28,
+                            color: Colors.black87,
+                          ),
                           Text(
                             _currentDateLabel(),
                             style: const TextStyle(
@@ -85,12 +111,19 @@ class _StaffHomePageState extends State<StaffHomePage> {
                               color: Colors.black,
                             ),
                           ),
-                          const Icon(Icons.settings_outlined, size: 26, color: Colors.black87),
+                          const Icon(
+                            Icons.settings_outlined,
+                            size: 26,
+                            color: Colors.black87,
+                          ),
                         ],
                       ),
                       const SizedBox(height: 18),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 12,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(28),
@@ -110,13 +143,23 @@ class _StaffHomePageState extends State<StaffHomePage> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 gradient: const LinearGradient(
-                                  colors: [Color(0xFF8BC5D9), Color(0xFFE4E9EE)],
+                                  colors: [
+                                    Color(0xFF8BC5D9),
+                                    Color(0xFFE4E9EE),
+                                  ],
                                   begin: Alignment.topCenter,
                                   end: Alignment.bottomCenter,
                                 ),
-                                border: Border.all(color: const Color(0xFFB9D4EA), width: 2),
+                                border: Border.all(
+                                  color: const Color(0xFFB9D4EA),
+                                  width: 2,
+                                ),
                               ),
-                              child: const Icon(Icons.person, size: 28, color: Colors.black87),
+                              child: const Icon(
+                                Icons.person,
+                                size: 28,
+                                color: Colors.black87,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
@@ -130,11 +173,15 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                   children: [
                                     TextSpan(
                                       text: 'Hello Miss Anushka,\n',
-                                      style: TextStyle(fontWeight: FontWeight.w500),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                      ),
                                     ),
                                     TextSpan(
                                       text: 'Ready for 4 meetings today!',
-                                      style: TextStyle(fontWeight: FontWeight.w700),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                      ),
                                     ),
                                   ],
                                 ),
@@ -146,7 +193,11 @@ class _StaffHomePageState extends State<StaffHomePage> {
                       const SizedBox(height: 18),
                       const Text(
                         "Today's meetings",
-                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.black),
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.black,
+                        ),
                       ),
                       const SizedBox(height: 12),
                       if (upcomingMeetings.isEmpty)
@@ -190,7 +241,8 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Text(
                                           meeting.studentName ?? 'Student',
@@ -200,7 +252,11 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                             color: Colors.black,
                                           ),
                                         ),
-                                        const Icon(Icons.edit_note, size: 24, color: Colors.black87),
+                                        const Icon(
+                                          Icons.edit_note,
+                                          size: 24,
+                                          color: Colors.black87,
+                                        ),
                                       ],
                                     ),
                                     const SizedBox(height: 8),
@@ -214,20 +270,37 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                     ),
                                     const Spacer(),
                                     Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
                                       children: [
                                         Row(
                                           children: [
-                                            const Icon(Icons.location_on_outlined, size: 16),
+                                            const Icon(
+                                              Icons.location_on_outlined,
+                                              size: 16,
+                                            ),
                                             const SizedBox(width: 6),
-                                            Text(meeting.location ?? 'TF 03', style: const TextStyle(fontSize: 13)),
+                                            Text(
+                                              meeting.location ?? 'TF 03',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                         Row(
                                           children: [
-                                            const Icon(Icons.access_time, size: 16),
+                                            const Icon(
+                                              Icons.access_time,
+                                              size: 16,
+                                            ),
                                             const SizedBox(width: 6),
-                                            Text(meeting.time ?? '11:35 AM', style: const TextStyle(fontSize: 13)),
+                                            Text(
+                                              meeting.time ?? '11:35 AM',
+                                              style: const TextStyle(
+                                                fontSize: 13,
+                                              ),
+                                            ),
                                           ],
                                         ),
                                       ],
@@ -244,13 +317,20 @@ class _StaffHomePageState extends State<StaffHomePage> {
                         children: [
                           const Text(
                             'Requests',
-                            style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.black),
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.black,
+                            ),
                           ),
                           TextButton(
-                            onPressed: () {},
+                            onPressed: () => setState(() => _selectedTab = 1),
                             child: const Text(
                               'view all',
-                              style: TextStyle(fontSize: 15, color: Color(0xFF4C8DF7)),
+                              style: TextStyle(
+                                fontSize: 15,
+                                color: Color(0xFF4C8DF7),
+                              ),
                             ),
                           ),
                         ],
@@ -277,7 +357,10 @@ class _StaffHomePageState extends State<StaffHomePage> {
                           child: const Text(
                             'No pending requests',
                             textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.black54, fontSize: 15),
+                            style: TextStyle(
+                              color: Colors.black54,
+                              fontSize: 15,
+                            ),
                           ),
                         )
                       else
@@ -285,7 +368,8 @@ class _StaffHomePageState extends State<StaffHomePage> {
                           shrinkWrap: true,
                           physics: const NeverScrollableScrollPhysics(),
                           itemCount: pendingRequests.length,
-                          separatorBuilder: (_, __) => const SizedBox(height: 14),
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 14),
                           itemBuilder: (context, index) {
                             final meeting = pendingRequests[index];
                             return Container(
@@ -300,15 +384,21 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                   CircleAvatar(
                                     radius: 26,
                                     backgroundColor: const Color(0xFFE9D8C8),
-                                    child: const Icon(Icons.person, color: Colors.black87, size: 26),
+                                    child: const Icon(
+                                      Icons.person,
+                                      color: Colors.black87,
+                                      size: 26,
+                                    ),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
                                     child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
                                         Row(
-                                          crossAxisAlignment: CrossAxisAlignment.center,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.center,
                                           children: [
                                             Text(
                                               meeting.studentName ?? 'Student',
@@ -319,13 +409,20 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                             ),
                                             const SizedBox(width: 8),
                                             Container(
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 8,
+                                                    vertical: 3,
+                                                  ),
                                               decoration: BoxDecoration(
                                                 color: const Color(0xFFEAF2FF),
-                                                borderRadius: BorderRadius.circular(12),
+                                                borderRadius:
+                                                    BorderRadius.circular(12),
                                               ),
                                               child: Text(
-                                                meeting.facultyDept.replaceAll('Dept of ', '').toLowerCase(),
+                                                meeting.facultyDept
+                                                    .replaceAll('Dept of ', '')
+                                                    .toLowerCase(),
                                                 style: const TextStyle(
                                                   color: Colors.black54,
                                                   fontSize: 11,
@@ -335,10 +432,19 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                             ),
                                             const Spacer(),
                                             GestureDetector(
-                                              onTap: () => _updateMeetingStatus(meeting, MeetingStatus.rejected),
+                                              onTap: () => _updateMeetingStatus(
+                                                meeting,
+                                                MeetingStatus.rejected,
+                                              ),
                                               child: const Padding(
-                                                padding: EdgeInsets.only(right: 4),
-                                                child: Icon(Icons.close, size: 22, color: Colors.black87),
+                                                padding: EdgeInsets.only(
+                                                  right: 4,
+                                                ),
+                                                child: Icon(
+                                                  Icons.close,
+                                                  size: 22,
+                                                  color: Colors.black87,
+                                                ),
                                               ),
                                             ),
                                           ],
@@ -353,10 +459,13 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                         ),
                                         const SizedBox(height: 10),
                                         Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                          mainAxisAlignment:
+                                              MainAxisAlignment.spaceBetween,
                                           children: [
                                             Text(
-                                              meeting.id.replaceAll('req_', '').toUpperCase(),
+                                              meeting.id
+                                                  .replaceAll('req_', '')
+                                                  .toUpperCase(),
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 color: Colors.black54,
@@ -364,10 +473,15 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                             ),
                                             Row(
                                               children: [
-                                                const Icon(Icons.access_time, size: 14, color: Colors.black54),
+                                                const Icon(
+                                                  Icons.access_time,
+                                                  size: 14,
+                                                  color: Colors.black54,
+                                                ),
                                                 const SizedBox(width: 4),
                                                 Text(
-                                                  meeting.time ?? 'Set time & venue',
+                                                  meeting.time ??
+                                                      'Set time & venue',
                                                   style: const TextStyle(
                                                     fontSize: 12,
                                                     color: Colors.black54,
@@ -381,11 +495,23 @@ class _StaffHomePageState extends State<StaffHomePage> {
                                         Align(
                                           alignment: Alignment.centerRight,
                                           child: TextButton.icon(
-                                            onPressed: () => _updateMeetingStatus(meeting, MeetingStatus.accepted),
-                                            icon: const Icon(Icons.arrow_forward, size: 16),
-                                            label: const Text('slide to accept', style: TextStyle(fontSize: 12)),
+                                            onPressed: () =>
+                                                _updateMeetingStatus(
+                                                  meeting,
+                                                  MeetingStatus.accepted,
+                                                ),
+                                            icon: const Icon(
+                                              Icons.arrow_forward,
+                                              size: 16,
+                                            ),
+                                            label: const Text(
+                                              'slide to accept',
+                                              style: TextStyle(fontSize: 12),
+                                            ),
                                             style: TextButton.styleFrom(
-                                              foregroundColor: const Color(0xFF4C8DF7),
+                                              foregroundColor: const Color(
+                                                0xFF4C8DF7,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -418,15 +544,31 @@ class _StaffHomePageState extends State<StaffHomePage> {
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: const [
-            Icon(Icons.home_outlined, size: 30),
-            Icon(Icons.calendar_month_outlined, size: 30),
-            Icon(Icons.add, size: 40),
-            Icon(Icons.notifications_none, size: 30),
-            Icon(Icons.person_outline, size: 30),
+          children: [
+            _buildNavButton(0, Icons.home_outlined, 'Home'),
+            _buildNavButton(1, Icons.calendar_month_outlined, 'Requests'),
+            _buildNavButton(2, Icons.history, 'History'),
+            _buildNavButton(3, Icons.notifications_none, 'Notifications'),
+            _buildNavButton(4, Icons.person_outline, 'Profile'),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildNavButton(int index, IconData icon, String label) {
+    return IconButton(
+      tooltip: label,
+      onPressed: () {
+        if (index == 0 || index == 1 || index == 2) {
+          setState(() => _selectedTab = index);
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$label is not available yet')),
+          );
+        }
+      },
+      icon: Icon(icon, size: index == 2 ? 34 : 26),
     );
   }
 
