@@ -1,4 +1,5 @@
 import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
 import '../models/meeting.dart';
@@ -20,6 +21,7 @@ class StudentHomePage extends StatefulWidget {
 
 class _StudentHomePageState extends State<StudentHomePage> {
   int _selectedTab = 0;
+  MeetingStatus _selectedStatus = MeetingStatus.accepted;
   List<Meeting> meetings = [];
   final StorageService _storageService = StorageService();
   bool _isLoading = true;
@@ -58,10 +60,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: SafeArea(
-        bottom: false,
-        child: _getBody(),
-      ),
+      body: SafeArea(bottom: false, child: _getBody()),
       bottomNavigationBar: _buildBottomNav(),
       extendBody: true, // This allows the body to go behind the bottom nav
     );
@@ -134,7 +133,13 @@ class _StudentHomePageState extends State<StudentHomePage> {
   }
 
   String _destinationTitle(int index) {
-    const titles = ['Home', 'Request Monitoring', 'Create a meeting', 'Notifications', 'Your profile'];
+    const titles = [
+      'Home',
+      'Request Monitoring',
+      'Create a meeting',
+      'Notifications',
+      'Your profile',
+    ];
     return titles[index];
   }
 
@@ -143,7 +148,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
       return const Center(child: CircularProgressIndicator());
     }
 
-    final acceptedMeetings = meetings.where((m) => m.status == MeetingStatus.accepted).toList();
+    final selectedMeetings = meetings
+        .where((meeting) => meeting.status == _selectedStatus)
+        .toList();
 
     return RefreshIndicator(
       onRefresh: _loadMeetings,
@@ -157,7 +164,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
             const SizedBox(height: 24),
             _buildStats(),
             const SizedBox(height: 28),
-            if (acceptedMeetings.isEmpty)
+            if (selectedMeetings.isEmpty)
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(24),
@@ -165,17 +172,19 @@ class _StudentHomePageState extends State<StudentHomePage> {
                   color: Colors.white,
                   borderRadius: BorderRadius.circular(24),
                 ),
-                child: const Text(
-                  'No accepted meetings yet. Your requests will appear here once faculty responds.',
+                child: Text(
+                  _emptyStatusMessage(),
                   textAlign: TextAlign.center,
                   style: TextStyle(color: StudentColors.mutedInk),
                 ),
               )
             else
-              ...acceptedMeetings.map((meeting) => Padding(
-                padding: const EdgeInsets.only(bottom: 24),
-                child: _buildMeetingCard(meeting),
-              )),
+              ...selectedMeetings.map(
+                (meeting) => Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: _buildMeetingCard(meeting),
+                ),
+              ),
           ],
         ),
       ),
@@ -187,14 +196,26 @@ class _StudentHomePageState extends State<StudentHomePage> {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         GestureDetector(
-          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const RequestsPage())),
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (context) => const RequestsPage()),
+          ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text('July 30th, 2025', style: TextStyle(color: StudentColors.mutedInk, fontSize: 14)),
+              Text(
+                'July 30th, 2025',
+                style: TextStyle(color: StudentColors.mutedInk, fontSize: 14),
+              ),
               const SizedBox(height: 8),
-              const Text('Hey, Thoufik!', style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold)),
-              const Text('Requests status..', style: TextStyle(fontSize: 22, fontWeight: FontWeight.w400)),
+              const Text(
+                'Hey, Thoufik!',
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              ),
+              const Text(
+                'Requests status..',
+                style: TextStyle(fontSize: 22, fontWeight: FontWeight.w400),
+              ),
             ],
           ),
         ),
@@ -202,10 +223,23 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
+  String _emptyStatusMessage() => switch (_selectedStatus) {
+    MeetingStatus.accepted => 'No accepted meetings yet. Your requests will appear here once faculty responds.',
+    MeetingStatus.rejected => 'No rejected meetings yet.',
+    MeetingStatus.pending => 'No pending meeting requests.',
+    MeetingStatus.completed => 'No completed meetings yet.',
+  };
+
   Widget _buildStats() {
-    final acceptedCount = meetings.where((m) => m.status == MeetingStatus.accepted).length.toString();
-    final rejectedCount = meetings.where((m) => m.status == MeetingStatus.rejected).length.toString();
-    final pendingCount = meetings.where((m) => m.status == MeetingStatus.pending).length.toString();
+    final acceptedCount = meetings
+        .where((m) => m.status == MeetingStatus.accepted)
+        .length;
+    final rejectedCount = meetings
+        .where((m) => m.status == MeetingStatus.rejected)
+        .length;
+    final pendingCount = meetings
+        .where((m) => m.status == MeetingStatus.pending)
+        .length;
 
     return Container(
       padding: const EdgeInsets.all(8),
@@ -222,47 +256,64 @@ class _StudentHomePageState extends State<StudentHomePage> {
       ),
       child: Row(
         children: [
-          _buildStatItem(acceptedCount, 'Accepted', true),
-          _buildStatItem(rejectedCount, 'Rejected', false),
-          _buildStatItem(pendingCount, 'Pending', false),
+          _buildStatItem(acceptedCount, 'Accepted', MeetingStatus.accepted),
+          _buildStatItem(rejectedCount, 'Rejected', MeetingStatus.rejected),
+          _buildStatItem(pendingCount, 'Pending', MeetingStatus.pending),
         ],
       ),
     );
   }
 
-  Widget _buildStatItem(String count, String label, bool isActive) {
+  Widget _buildStatItem(int count, String label, MeetingStatus status) {
+    final isActive = _selectedStatus == status;
     return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        decoration: BoxDecoration(
-          color: isActive ? StudentColors.primary : Colors.transparent,
+      child: Semantics(
+        button: true,
+        selected: isActive,
+        label: '$label meetings: $count',
+        child: Material(
+          color: Colors.transparent,
           borderRadius: BorderRadius.circular(22),
-          boxShadow: isActive ? [
-            BoxShadow(
-              color: StudentColors.primary.withValues(alpha: 0.3),
-              blurRadius: 12,
-              offset: const Offset(0, 6),
-            )
-          ] : null,
-        ),
-        child: Column(
-          children: [
-            Text(
-              count,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-                color: isActive ? Colors.white : StudentColors.ink,
+          child: InkWell(
+            key: ValueKey('student-status-${status.name}'),
+            borderRadius: BorderRadius.circular(22),
+            onTap: () => setState(() => _selectedStatus = status),
+            child: Container(
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              decoration: BoxDecoration(
+                color: isActive ? StudentColors.primary : Colors.transparent,
+                borderRadius: BorderRadius.circular(22),
+                boxShadow: isActive
+                    ? [
+                        BoxShadow(
+                          color: StudentColors.primary.withValues(alpha: 0.3),
+                          blurRadius: 12,
+                          offset: const Offset(0, 6),
+                        ),
+                      ]
+                    : null,
+              ),
+              child: Column(
+                children: [
+                  Text(
+                    '$count',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: isActive ? Colors.white : StudentColors.ink,
+                    ),
+                  ),
+                  Text(
+                    label,
+                    style: TextStyle(
+                      fontSize: 14,
+                      color: isActive ? Colors.white : StudentColors.mutedInk,
+                    ),
+                  ),
+                ],
               ),
             ),
-            Text(
-              label,
-              style: TextStyle(
-                fontSize: 14,
-                color: isActive ? Colors.white : StudentColors.mutedInk,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -296,18 +347,30 @@ class _StudentHomePageState extends State<StudentHomePage> {
                         shape: BoxShape.circle,
                       ),
                     ),
-                    Icon(Icons.school, size: 80, color: StudentColors.primary.withValues(alpha: 0.8)),
+                    Icon(
+                      Icons.school,
+                      size: 80,
+                      color: StudentColors.primary.withValues(alpha: 0.8),
+                    ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.settings, size: 24, color: Colors.white.withValues(alpha: 0.6)),
+                    Icon(
+                      Icons.settings,
+                      size: 24,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
                     const SizedBox(width: 40),
-                    Icon(Icons.lightbulb, size: 24, color: Colors.white.withValues(alpha: 0.6)),
+                    Icon(
+                      Icons.lightbulb,
+                      size: 24,
+                      color: Colors.white.withValues(alpha: 0.6),
+                    ),
                   ],
-                )
+                ),
               ],
             ),
           ),
@@ -324,16 +387,23 @@ class _StudentHomePageState extends State<StudentHomePage> {
                   BoxShadow(
                     color: Colors.black.withValues(alpha: 0.05),
                     blurRadius: 10,
-                  )
+                  ),
                 ],
               ),
               child: Column(
                 children: [
-                  const Icon(Icons.location_on, color: StudentColors.primary, size: 18),
+                  const Icon(
+                    Icons.location_on,
+                    color: StudentColors.primary,
+                    size: 18,
+                  ),
                   const SizedBox(height: 2),
                   Text(
                     meeting.location ?? 'TBD',
-                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -353,7 +423,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
                   decoration: BoxDecoration(
                     color: StudentColors.primary.withValues(alpha: 0.75),
                     borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.2),
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -374,7 +446,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
                             ),
                           ),
                           Icon(
-                            meeting.isPinned ? Icons.push_pin : Icons.push_pin_outlined,
+                            meeting.isPinned
+                                ? Icons.push_pin
+                                : Icons.push_pin_outlined,
                             color: Colors.white,
                             size: 20,
                           ),
@@ -394,24 +468,46 @@ class _StudentHomePageState extends State<StudentHomePage> {
                         children: [
                           Row(
                             children: [
-                              const Icon(Icons.access_time_filled, color: Colors.white, size: 16),
+                              const Icon(
+                                Icons.access_time_filled,
+                                color: Colors.white,
+                                size: 16,
+                              ),
                               const SizedBox(width: 6),
                               Text(
                                 meeting.time ?? 'TBD',
-                                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w500,
+                                ),
                               ),
                             ],
                           ),
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: Colors.white.withValues(alpha: 0.1),
-                              border: Border.all(color: Colors.white.withValues(alpha: 0.5)),
+                              border: Border.all(
+                                color: Colors.white.withValues(alpha: 0.5),
+                              ),
                               borderRadius: BorderRadius.circular(18),
                             ),
-                            child: const Text(
-                              'Upcoming',
-                              style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                            child: Text(
+                              switch (meeting.status) {
+                                MeetingStatus.accepted => 'Upcoming',
+                                MeetingStatus.rejected => 'Rejected',
+                                MeetingStatus.pending => 'Pending',
+                                MeetingStatus.completed => 'Completed',
+                              },
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
                           ),
                         ],

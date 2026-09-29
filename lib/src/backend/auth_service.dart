@@ -18,14 +18,8 @@ class AuthService {
   static const String _key = 'smart_meet_user_session';
 
   static const Map<String, Map<String, dynamic>> _defaultCredentials = {
-    'student': {
-      'password': 'student123',
-      'role': UserRole.student,
-    },
-    'staff': {
-      'password': 'staff123',
-      'role': UserRole.staff,
-    },
+    'student': {'password': 'student123', 'role': UserRole.student},
+    'staff': {'password': 'staff123', 'role': UserRole.staff},
   };
 
   Future<AuthResult> login(String username, String password) async {
@@ -77,6 +71,11 @@ class AuthService {
 
     final role = _defaultCredentials[username]?['role'] as UserRole?;
     return role;
+  }
+
+  Future<String?> getCurrentUsername() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_key);
   }
 
   Future<void> logout() async {

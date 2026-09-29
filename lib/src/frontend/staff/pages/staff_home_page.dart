@@ -4,6 +4,8 @@ import 'package:intl/intl.dart';
 import '../../../backend/local_storage_service.dart';
 import '../../student/models/meeting.dart';
 import 'staff_history_page.dart';
+import 'staff_notifications_page.dart';
+import 'staff_profile_page.dart';
 import 'staff_requests_page.dart';
 
 class StaffHomePage extends StatefulWidget {
@@ -48,6 +50,69 @@ class _StaffHomePageState extends State<StaffHomePage> {
     await _loadMeetings();
   }
 
+  Future<void> _editReminder(Meeting meeting) async {
+    var updatedTime = meeting.time ?? '';
+    var updatedLocation = meeting.location ?? '';
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit reminder'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextFormField(
+              key: const ValueKey('reminder-time'),
+              initialValue: updatedTime,
+              onChanged: (value) => updatedTime = value,
+              decoration: const InputDecoration(labelText: 'Meeting time'),
+            ),
+            TextFormField(
+              key: const ValueKey('reminder-location'),
+              initialValue: updatedLocation,
+              onChanged: (value) => updatedLocation = value,
+              decoration: const InputDecoration(labelText: 'Venue'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(dialogContext, true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    if (shouldSave == true) {
+      final meetings = await _storageService.getMeetings();
+      final index = meetings.indexWhere((item) => item.id == meeting.id);
+      if (index >= 0) {
+        meetings[index] = Meeting(
+          id: meeting.id,
+          facultyName: meeting.facultyName,
+          facultyDept: meeting.facultyDept,
+          purpose: meeting.purpose,
+          time: updatedTime.trim().isEmpty ? null : updatedTime.trim(),
+          location: updatedLocation.trim().isEmpty
+              ? null
+              : updatedLocation.trim(),
+          status: meeting.status,
+          cardColorValue: meeting.cardColorValue,
+          isPinned: meeting.isPinned,
+          requestedAt: meeting.requestedAt,
+          denialReason: meeting.denialReason,
+          studentName: meeting.studentName,
+        );
+        await _storageService.saveMeetings(meetings);
+        await _loadMeetings();
+      }
+    }
+  }
+
   String _currentDateLabel() {
     final now = DateTime.now();
     final day = now.day;
@@ -74,12 +139,23 @@ class _StaffHomePageState extends State<StaffHomePage> {
         .toList();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF4F6FA),
+      backgroundColor: _selectedTab == 4
+          ? Colors.white
+          : const Color(0xFFF4F6FA),
       body: SafeArea(
         child: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _selectedTab == 2
             ? StaffHistoryPage(meetings: _meetings, onRefresh: _loadMeetings)
+            : _selectedTab == 3
+            ? StaffNotificationsPage(
+                meetings: _meetings,
+                onRefresh: _loadMeetings,
+                onBack: () => setState(() => _selectedTab = 0),
+                onEditReminder: _editReminder,
+              )
+            : _selectedTab == 4
+            ? StaffProfilePage(onBack: () => setState(() => _selectedTab = 0))
             : _selectedTab == 1
             ? StaffRequestsPage(
                 meetings: _meetings,
@@ -560,7 +636,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
     return IconButton(
       tooltip: label,
       onPressed: () {
-        if (index == 0 || index == 1 || index == 2) {
+        if (index >= 0 && index <= 4) {
           setState(() => _selectedTab = index);
         } else {
           ScaffoldMessenger.of(context).showSnackBar(
