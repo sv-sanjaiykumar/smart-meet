@@ -24,6 +24,19 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Hey, Thoufik!'), findsOneWidget);
+      final today = DateTime.now();
+      final expectedDaySuffix = switch (today.day % 10) {
+        1 when today.day % 100 != 11 => 'st',
+        2 when today.day % 100 != 12 => 'nd',
+        3 when today.day % 100 != 13 => 'rd',
+        _ => 'th',
+      };
+      expect(
+        find.text(
+          '${DateFormat('MMMM').format(today)} ${today.day}$expectedDaySuffix, ${today.year}',
+        ),
+        findsOneWidget,
+      );
       expect(
         find.text(
           'No accepted meetings yet. Your requests will appear here once faculty responds.',
@@ -203,16 +216,33 @@ void main() {
 
       expect(find.text('Accepted meeting purpose'), findsOneWidget);
       expect(find.text('Room 101'), findsOneWidget);
+      expect(
+        find.byKey(const ValueKey('meeting-illustration-student_accepted')),
+        findsOneWidget,
+      );
 
+      final indicator = find.byKey(const ValueKey('student-status-indicator'));
+      final acceptedIndicatorX = tester.getTopLeft(indicator).dx;
       await tester.tap(find.byKey(const ValueKey('student-status-rejected')));
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 100));
+      expect(tester.getTopLeft(indicator).dx, greaterThan(acceptedIndicatorX));
       await tester.pumpAndSettle();
       expect(find.text('Rejected meeting purpose'), findsOneWidget);
       expect(find.text('Accepted meeting purpose'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('meeting-illustration-student_rejected')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const ValueKey('student-status-pending')));
       await tester.pumpAndSettle();
       expect(find.text('Pending meeting purpose'), findsOneWidget);
       expect(find.text('Rejected meeting purpose'), findsNothing);
+      expect(
+        find.byKey(const ValueKey('meeting-illustration-student_pending')),
+        findsOneWidget,
+      );
 
       await tester.tap(find.byKey(const ValueKey('student-status-accepted')));
       await tester.pumpAndSettle();

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 abstract final class StudentColors {
-  static const background = Color(0xFFF9FBFF);
+  static const background = Color(0xFFEAF4FF);
   static const backgroundDark = Color(0xFF0F172A);
   static const ink = Color(0xFF101318);
   static const inkDark = Color(0xFFF8FAFC);
@@ -26,10 +26,10 @@ abstract final class StudentTheme {
         onSurface: StudentColors.ink,
       ),
       textTheme: base.textTheme.apply(
+        fontFamily: 'Poppins',
         bodyColor: StudentColors.ink,
         displayColor: StudentColors.ink,
       ),
     );
   }
-
 }

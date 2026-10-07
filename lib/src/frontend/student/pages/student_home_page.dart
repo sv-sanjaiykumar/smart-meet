@@ -1,6 +1,7 @@
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../models/meeting.dart';
 import '../services/storage_service.dart';
@@ -192,6 +193,14 @@ class _StudentHomePageState extends State<StudentHomePage> {
   }
 
   Widget _buildHeader() {
+    final now = DateTime.now();
+    final daySuffix = switch (now.day % 10) {
+      1 when now.day % 100 != 11 => 'st',
+      2 when now.day % 100 != 12 => 'nd',
+      3 when now.day % 100 != 13 => 'rd',
+      _ => 'th',
+    };
+
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -204,7 +213,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'July 30th, 2025',
+                '${DateFormat('MMMM').format(now)} ${now.day}$daySuffix, ${now.year}',
                 style: TextStyle(color: StudentColors.mutedInk, fontSize: 14),
               ),
               const SizedBox(height: 8),
@@ -254,11 +263,45 @@ class _StudentHomePageState extends State<StudentHomePage> {
           ),
         ],
       ),
-      child: Row(
+      child: Stack(
         children: [
-          _buildStatItem(acceptedCount, 'Accepted', MeetingStatus.accepted),
-          _buildStatItem(rejectedCount, 'Rejected', MeetingStatus.rejected),
-          _buildStatItem(pendingCount, 'Pending', MeetingStatus.pending),
+          Positioned.fill(
+            child: AnimatedAlign(
+              alignment: switch (_selectedStatus) {
+                MeetingStatus.accepted => Alignment.centerLeft,
+                MeetingStatus.rejected => Alignment.center,
+                MeetingStatus.pending => Alignment.centerRight,
+                MeetingStatus.completed => Alignment.centerLeft,
+              },
+              duration: const Duration(milliseconds: 280),
+              curve: Curves.easeInOut,
+              child: FractionallySizedBox(
+                widthFactor: 1 / 3,
+                heightFactor: 1,
+                child: DecoratedBox(
+                  key: const ValueKey('student-status-indicator'),
+                  decoration: BoxDecoration(
+                    color: StudentColors.primary,
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: StudentColors.primary.withValues(alpha: 0.3),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Row(
+            children: [
+              _buildStatItem(acceptedCount, 'Accepted', MeetingStatus.accepted),
+              _buildStatItem(rejectedCount, 'Rejected', MeetingStatus.rejected),
+              _buildStatItem(pendingCount, 'Pending', MeetingStatus.pending),
+            ],
+          ),
         ],
       ),
     );
@@ -280,35 +323,26 @@ class _StudentHomePageState extends State<StudentHomePage> {
             onTap: () => setState(() => _selectedStatus = status),
             child: Container(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: isActive ? StudentColors.primary : Colors.transparent,
-                borderRadius: BorderRadius.circular(22),
-                boxShadow: isActive
-                    ? [
-                        BoxShadow(
-                          color: StudentColors.primary.withValues(alpha: 0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
-                        ),
-                      ]
-                    : null,
-              ),
               child: Column(
                 children: [
-                  Text(
-                    '$count',
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeInOut,
                     style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: isActive ? Colors.white : StudentColors.ink,
                     ),
+                    child: Text('$count'),
                   ),
-                  Text(
-                    label,
+                  AnimatedDefaultTextStyle(
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeInOut,
                     style: TextStyle(
                       fontSize: 14,
                       color: isActive ? Colors.white : StudentColors.mutedInk,
                     ),
+                    child: Text(label),
                   ),
                 ],
               ),
@@ -329,49 +363,19 @@ class _StudentHomePageState extends State<StudentHomePage> {
       ),
       child: Stack(
         children: [
-          // Illustration Placeholder (More detailed)
           Positioned(
-            top: 60,
+            top: 12,
             left: 0,
             right: 0,
-            child: Column(
-              children: [
-                Stack(
-                  alignment: Alignment.center,
-                  children: [
-                    Container(
-                      width: 140,
-                      height: 140,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.3),
-                        shape: BoxShape.circle,
-                      ),
-                    ),
-                    Icon(
-                      Icons.school,
-                      size: 80,
-                      color: StudentColors.primary.withValues(alpha: 0.8),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(
-                      Icons.settings,
-                      size: 24,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                    const SizedBox(width: 40),
-                    Icon(
-                      Icons.lightbulb,
-                      size: 24,
-                      color: Colors.white.withValues(alpha: 0.6),
-                    ),
-                  ],
-                ),
-              ],
+            child: Center(
+              child: Image.asset(
+                'assets/meeting facutly assest-01.png',
+                key: ValueKey('meeting-illustration-${meeting.id}'),
+                width: 170,
+                height: 170,
+                fit: BoxFit.contain,
+                semanticLabel: 'Student studying illustration',
+              ),
             ),
           ),
           // Location Badge

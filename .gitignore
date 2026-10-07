@@ -48,17 +48,8 @@ app.*.map.json
 .widget_preview/
 
 # Local UI reference screenshots
-/Faculty home screen request pending.png
-/faculty handling request - ACCEPTED.png
-/faculty handling request - ALL.png
-/faculty handling request - NEW.png
-/faculty handling request - PENDING (1).png
-/faculty handling request - PENDING.png
-/faculty meeting history CANCELLED.png
-/faculty meeting history COMPLETED.png
-/Login/Register.jpg
-/Faculty notification - All.png
-/Faculty notification - System.png
-/Faculty Profile 1.png
-/Faculty Profile 2.png
-/Faculty notification - reminders.png
+/assets/
+!/assets/
+/assets/*
+!/assets/fonts/
+!/assets/meeting facutly assest-01.png
