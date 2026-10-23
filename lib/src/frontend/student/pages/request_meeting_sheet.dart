@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../models/meeting.dart';
-import '../services/storage_service.dart';
+
+import '../../../backend/faculty_service.dart';
+import '../../../backend/meeting_service.dart';
 import '../theme/student_theme.dart';
 
 class RequestMeetingSheet extends StatefulWidget {
@@ -12,32 +13,133 @@ class RequestMeetingSheet extends StatefulWidget {
 }
 
 class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
-  String selectedDept = 'CSE';
-  String? selectedPurpose = 'Project Discussion';
+  // ── services ───────────────────────────────────────────────────────────────
+  final FacultyService _facultyService = FacultyService();
+  final MeetingService _meetingService = MeetingService();
+
+  // ── state ──────────────────────────────────────────────────────────────────
+  String _selectedDept = 'CSE';
+  String? _selectedPurpose = 'Project Discussion';
+  String? _selectedDesignation;
+  FacultyModel? _selectedFaculty;
+  DateTime _selectedDate = DateTime.now();
+  bool _isSubmitting = false;
+
   final TextEditingController _searchController = TextEditingController();
-  final StorageService _storageService = StorageService();
+
+  List<FacultyModel> _allFaculty = [];
+  List<FacultyModel> _filtered = [];
+  List<String> _departments = [];
+  bool _loadingFaculty = true;
+
+  static const List<String> _purposes = [
+    'Academic',
+    'Project Discussion',
+    'Personal',
+    'Form Sign',
+    'Exam Clarification',
+    'Research Query',
+  ];
+
+  static const List<String> _designations = [
+    'Professor',
+    'Associate Professor',
+    'Assistant Professor',
+    'Lecturer',
+  ];
+
+  // ── lifecycle ──────────────────────────────────────────────────────────────
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFaculty();
+    _searchController.addListener(_onSearchChanged);
+  }
+
+  @override
+  void dispose() {
+    _searchController
+      ..removeListener(_onSearchChanged)
+      ..dispose();
+    super.dispose();
+  }
+
+  // ── data loading ───────────────────────────────────────────────────────────
+
+  Future<void> _loadFaculty() async {
+    final faculty = await _facultyService.getAllFaculty();
+    final depts = await _facultyService.getDepartments();
+    if (!mounted) return;
+    setState(() {
+      _allFaculty = faculty;
+      _departments = depts;
+      _loadingFaculty = false;
+      _applyFilters();
+    });
+  }
+
+  void _onSearchChanged() => setState(_applyFilters);
+
+  void _applyFilters() {
+    var list = _allFaculty
+        .where((f) => f.department == _selectedDept)
+        .toList();
+
+    if (_selectedDesignation != null) {
+      list = list.where((f) => f.designation == _selectedDesignation).toList();
+    }
+
+    final q = _searchController.text.trim().toLowerCase();
+    if (q.isNotEmpty) {
+      list = list
+          .where(
+            (f) =>
+                f.name.toLowerCase().contains(q) ||
+                (f.specialization?.toLowerCase().contains(q) ?? false),
+          )
+          .toList();
+    }
+
+    _filtered = list;
+
+    // De-select faculty if they no longer appear in the filtered list
+    if (_selectedFaculty != null &&
+        !_filtered.any((f) => f.id == _selectedFaculty!.id)) {
+      _selectedFaculty = null;
+    }
+  }
+
+  // ── submission ─────────────────────────────────────────────────────────────
 
   Future<void> _handleRequest() async {
-    final meetings = await _storageService.getMeetings();
-    
-    // Create a new request based on UI selections
-    final newMeeting = Meeting(
-      id: 'req_${DateTime.now().millisecondsSinceEpoch}',
-      facultyName: _searchController.text.isEmpty ? 'Prof. Alexa Maryam' : _searchController.text,
-      facultyDept: 'Dept of $selectedDept',
-      purpose: selectedPurpose ?? 'Academic doubts',
-      status: MeetingStatus.pending,
-      cardColorValue: 0xFFFFFFFF,
-      requestedAt: DateFormat('dd MMM, h:mm a').format(DateTime.now()),
-      isPinned: false,
-      studentName: 'Student',
-    );
+    if (_selectedPurpose == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a meeting purpose.')),
+      );
+      return;
+    }
 
-    meetings.insert(0, newMeeting); // Add to the top
-    await _storageService.saveMeetings(meetings);
-    
-    if (mounted) {
-      Navigator.pop(context, true); // Return true to indicate a new request was added
+    final facultyName = _selectedFaculty?.name ??
+        (_searchController.text.trim().isNotEmpty
+            ? _searchController.text.trim()
+            : 'Faculty');
+    final facultyDept = 'Dept of $_selectedDept';
+
+    setState(() => _isSubmitting = true);
+
+    try {
+      await _meetingService.submitMeetingRequest(
+        facultyName: facultyName,
+        facultyDept: facultyDept,
+        purpose: _selectedPurpose!,
+        // Use the first matching staff username if available
+        staffUsername: _staffUsernameFor(facultyName),
+      );
+
+      if (!mounted) return;
+
+      Navigator.pop(context, true);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: const Text('Meeting request sent successfully!'),
@@ -45,8 +147,41 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } catch (_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Failed to send request. Please try again.')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmitting = false);
     }
   }
+
+  /// Best-effort mapping from faculty display name to a staff username.
+  String _staffUsernameFor(String facultyName) {
+    final lower = facultyName.toLowerCase();
+    if (lower.contains('anushka')) return 'anushka';
+    if (lower.contains('lakshmanan')) return 'lakshmanan';
+    if (lower.contains('anwar')) return 'staff';
+    return 'staff';
+  }
+
+  // ── date picker ────────────────────────────────────────────────────────────
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: now,
+      lastDate: now.add(const Duration(days: 90)),
+    );
+    if (picked != null && mounted) {
+      setState(() => _selectedDate = picked);
+    }
+  }
+
+  // ── UI ─────────────────────────────────────────────────────────────────────
 
   @override
   Widget build(BuildContext context) {
@@ -64,6 +199,7 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // drag handle
             Center(
               child: Container(
                 width: 48,
@@ -74,25 +210,31 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
                 ),
               ),
             ),
-            const SizedBox(height: 30),
-            // Date Selector
-            Row(
-              children: [
-                Text(
-                  '30th July',
-                  style: TextStyle(
-                    color: StudentColors.primary,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                    decoration: TextDecoration.underline,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Icon(Icons.calendar_month_outlined, color: StudentColors.primary, size: 24),
-              ],
-            ),
             const SizedBox(height: 24),
-            // Search Bar
+
+            // ── Date selector ────────────────────────────────────────────────
+            GestureDetector(
+              onTap: _pickDate,
+              child: Row(
+                children: [
+                  Text(
+                    _formatDate(_selectedDate),
+                    style: TextStyle(
+                      color: StudentColors.primary,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Icon(Icons.calendar_month_outlined,
+                      color: StudentColors.primary, size: 24),
+                ],
+              ),
+            ),
+            const SizedBox(height: 20),
+
+            // ── Faculty search ───────────────────────────────────────────────
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18),
               decoration: BoxDecoration(
@@ -103,34 +245,45 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
               child: TextField(
                 controller: _searchController,
                 decoration: const InputDecoration(
-                  hintText: 'Apply filters, pick faculty',
-                  hintStyle: TextStyle(color: Colors.grey, fontSize: 16),
+                  hintText: 'Search faculty by name or specialization',
+                  hintStyle: TextStyle(color: Colors.grey, fontSize: 15),
                   border: InputBorder.none,
                   suffixIcon: Icon(Icons.search, color: Colors.grey),
                 ),
               ),
             ),
-            const SizedBox(height: 24),
-            // Department Chips
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              clipBehavior: Clip.none,
-              child: Row(
-                children: [
-                  _buildDeptChip('CSE', selectedDept == 'CSE'),
-                  _buildDeptChip('ECE', selectedDept == 'ECE'),
-                  _buildDeptChip('AI&ML', selectedDept == 'AI&ML'),
-                  _buildDeptChip('CSE-B', selectedDept == 'CSE-B'),
-                ],
+            const SizedBox(height: 20),
+
+            // ── Department chips ─────────────────────────────────────────────
+            if (_departments.isNotEmpty)
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                child: Row(
+                  children: _departments
+                      .map((d) => _buildDeptChip(d, _selectedDept == d))
+                      .toList(),
+                ),
+              )
+            else
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                clipBehavior: Clip.none,
+                child: Row(
+                  children: ['CSE', 'ECE', 'AI&ML', 'CSE-B']
+                      .map((d) => _buildDeptChip(d, _selectedDept == d))
+                      .toList(),
+                ),
               ),
-            ),
-            const SizedBox(height: 24),
-            // Designation Dropdown
+            const SizedBox(height: 20),
+
+            // ── Designation filter ───────────────────────────────────────────
             Row(
               children: [
                 Expanded(
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
                     decoration: BoxDecoration(
                       color: Colors.grey[50],
                       borderRadius: BorderRadius.circular(20),
@@ -138,35 +291,96 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
                     ),
                     child: DropdownButtonHideUnderline(
                       child: DropdownButton<String>(
-                        hint: const Text('Select faculty designation', style: TextStyle(fontSize: 15, color: Colors.grey)),
+                        hint: const Text(
+                          'Filter by designation',
+                          style: TextStyle(fontSize: 15, color: Colors.grey),
+                        ),
+                        value: _selectedDesignation,
                         isExpanded: true,
-                        items: const [],
-                        onChanged: (v) {},
+                        items: [
+                          const DropdownMenuItem<String>(
+                            value: null,
+                            child: Text('All designations'),
+                          ),
+                          ..._designations.map(
+                            (d) => DropdownMenuItem(value: d, child: Text(d)),
+                          ),
+                        ],
+                        onChanged: (v) =>
+                            setState(() {
+                              _selectedDesignation = v;
+                              _applyFilters();
+                            }),
                       ),
                     ),
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Text('Optional*', style: TextStyle(color: Colors.grey, fontSize: 13)),
+                const Text(
+                  'Optional*',
+                  style: TextStyle(color: Colors.grey, fontSize: 13),
+                ),
               ],
             ),
-            const SizedBox(height: 32),
-            // Purposes Grid
+            const SizedBox(height: 20),
+
+            // ── Faculty list ─────────────────────────────────────────────────
+            if (_loadingFaculty)
+              const Center(child: CircularProgressIndicator())
+            else if (_filtered.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey[50],
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: const Text(
+                  'No faculty found for the selected filters.',
+                  style: TextStyle(color: Colors.grey),
+                ),
+              )
+            else
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Select faculty (${_filtered.length})',
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ..._filtered.map(_buildFacultyCard),
+                ],
+              ),
+            const SizedBox(height: 24),
+
+            // ── Purpose grid ─────────────────────────────────────────────────
             _buildPurposeGrid(),
-            const SizedBox(height: 40),
-            // Action Buttons
+            const SizedBox(height: 36),
+
+            // ── Action buttons ────────────────────────────────────────────────
             Row(
               children: [
                 Expanded(
                   flex: 3,
                   child: OutlinedButton.icon(
-                    onPressed: () {},
+                    onPressed: _isSubmitting ? null : () {},
                     icon: const Icon(Icons.open_in_new, size: 20),
-                    label: const Text('Preview', style: TextStyle(fontWeight: FontWeight.w600)),
+                    label: const Text(
+                      'Preview',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                      side: BorderSide(color: StudentColors.primary.withValues(alpha: 0.3)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      side: BorderSide(
+                        color: StudentColors.primary.withValues(alpha: 0.3),
+                      ),
                       foregroundColor: StudentColors.primary,
                     ),
                   ),
@@ -175,22 +389,39 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
                 Expanded(
                   flex: 5,
                   child: ElevatedButton(
-                    onPressed: _handleRequest,
+                    onPressed: _isSubmitting ? null : _handleRequest,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: StudentColors.primary,
                       foregroundColor: Colors.white,
                       padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
                       elevation: 0,
                     ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text('Request', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                        SizedBox(width: 8),
-                        Icon(Icons.keyboard_double_arrow_right, size: 20),
-                      ],
-                    ),
+                    child: _isSubmitting
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                'Request',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 16,
+                                ),
+                              ),
+                              SizedBox(width: 8),
+                              Icon(Icons.keyboard_double_arrow_right, size: 20),
+                            ],
+                          ),
                   ),
                 ),
               ],
@@ -201,14 +432,22 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
     );
   }
 
+  // ── widget builders ────────────────────────────────────────────────────────
+
   Widget _buildDeptChip(String label, bool isSelected) {
     return GestureDetector(
-      onTap: () => setState(() => selectedDept = label),
+      onTap: () => setState(() {
+        _selectedDept = label;
+        _selectedFaculty = null;
+        _applyFilters();
+      }),
       child: Container(
         margin: const EdgeInsets.only(right: 12),
         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
-          color: isSelected ? StudentColors.primary.withValues(alpha: 0.1) : Colors.white,
+          color: isSelected
+              ? StudentColors.primary.withValues(alpha: 0.1)
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: isSelected ? StudentColors.primary : Colors.grey[200]!,
@@ -221,7 +460,8 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
               label,
               style: TextStyle(
                 color: isSelected ? StudentColors.primary : Colors.grey[600],
-                fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                fontWeight:
+                    isSelected ? FontWeight.bold : FontWeight.w500,
                 fontSize: 14,
               ),
             ),
@@ -236,33 +476,133 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
     );
   }
 
-  Widget _buildPurposeGrid() {
-    final purposes = ['Academic', 'Project Discussion', 'Personal', 'Form Sign'];
+  Widget _buildFacultyCard(FacultyModel faculty) {
+    final isSelected = _selectedFaculty?.id == faculty.id;
+    return GestureDetector(
+      onTap: () => setState(() {
+        _selectedFaculty = isSelected ? null : faculty;
+      }),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? StudentColors.primary.withValues(alpha: 0.06)
+              : Colors.grey[50],
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: isSelected ? StudentColors.primary : Colors.grey[200]!,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            CircleAvatar(
+              radius: 20,
+              backgroundColor: isSelected
+                  ? StudentColors.primary.withValues(alpha: 0.15)
+                  : Colors.grey[200],
+              child: Text(
+                faculty.name.trim().split(' ').last[0].toUpperCase(),
+                style: TextStyle(
+                  color: isSelected ? StudentColors.primary : Colors.grey[600],
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    faculty.name,
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 14,
+                      color: isSelected ? StudentColors.primary : Colors.black87,
+                    ),
+                  ),
+                  if (faculty.specialization != null)
+                    Text(
+                      '${faculty.designation} · ${faculty.specialization}',
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 12,
+                      ),
+                    )
+                  else
+                    Text(
+                      faculty.designation,
+                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                    ),
+                ],
+              ),
+            ),
+            if (!faculty.isAvailable)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.orange[50],
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.orange[200]!),
+                ),
+                child: Text(
+                  'Busy',
+                  style: TextStyle(
+                    color: Colors.orange[700],
+                    fontSize: 11,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              )
+            else if (isSelected)
+              const Icon(Icons.check_circle, color: StudentColors.primary, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
 
+  Widget _buildPurposeGrid() {
     return LayoutBuilder(
       builder: (context, constraints) {
         final itemWidth = (constraints.maxWidth - 20) / 2;
-
-        return Wrap(
-          spacing: 20,
-          runSpacing: 16,
-          children: purposes
-              .map(
-                (label) => SizedBox(
-                  width: itemWidth,
-                  child: _buildPurposeItem(label),
-                ),
-              )
-              .toList(),
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Purpose of visit',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 13,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Wrap(
+              spacing: 20,
+              runSpacing: 14,
+              children: _purposes
+                  .map(
+                    (label) => SizedBox(
+                      width: itemWidth,
+                      child: _buildPurposeItem(label),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
         );
       },
     );
   }
 
   Widget _buildPurposeItem(String label) {
-    bool isSelected = selectedPurpose == label;
+    final isSelected = _selectedPurpose == label;
     return GestureDetector(
-      onTap: () => setState(() => selectedPurpose = label),
+      onTap: () => setState(() => _selectedPurpose = label),
       child: Row(
         children: [
           Icon(
@@ -276,12 +616,26 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
               label,
               style: TextStyle(
                 color: isSelected ? StudentColors.ink : Colors.grey[600],
-                fontWeight: isSelected ? FontWeight.w500 : FontWeight.normal,
+                fontWeight:
+                    isSelected ? FontWeight.w500 : FontWeight.normal,
               ),
             ),
           ),
         ],
       ),
     );
+  }
+
+  // ── helpers ────────────────────────────────────────────────────────────────
+
+  String _formatDate(DateTime date) {
+    final day = date.day;
+    final suffix = switch (day % 10) {
+      1 when day != 11 => 'st',
+      2 when day != 12 => 'nd',
+      3 when day != 13 => 'rd',
+      _ => 'th',
+    };
+    return '${DateFormat('MMMM').format(date)} $day$suffix';
   }
 }

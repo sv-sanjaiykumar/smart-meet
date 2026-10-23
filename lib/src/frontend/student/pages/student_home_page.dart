@@ -3,6 +3,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
+import '../../../backend/auth_service.dart';
 import '../models/meeting.dart';
 import '../services/storage_service.dart';
 import '../theme/student_theme.dart';
@@ -25,7 +26,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
   MeetingStatus _selectedStatus = MeetingStatus.accepted;
   List<Meeting> meetings = [];
   final StorageService _storageService = StorageService();
+  final AuthService _authService = AuthService();
   bool _isLoading = true;
+  String _studentName = 'Student';
 
   @override
   void initState() {
@@ -34,8 +37,11 @@ class _StudentHomePageState extends State<StudentHomePage> {
   }
 
   Future<void> _loadMeetings() async {
+    final user = await _authService.getCurrentUser();
     final loadedMeetings = await _storageService.getMeetings();
+    if (!mounted) return;
     setState(() {
+      _studentName = user?.displayName ?? 'Student';
       meetings = loadedMeetings;
       _isLoading = false;
     });
@@ -217,9 +223,9 @@ class _StudentHomePageState extends State<StudentHomePage> {
                 style: TextStyle(color: StudentColors.mutedInk, fontSize: 14),
               ),
               const SizedBox(height: 8),
-              const Text(
-                'Hey, Thoufik!',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+              Text(
+                'Hey, $_studentName!',
+                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
               ),
               const Text(
                 'Requests status..',

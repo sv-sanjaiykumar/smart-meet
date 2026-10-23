@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
-import '../../../backend/local_storage_service.dart';
+import '../../../backend/meeting_service.dart';
 import '../../student/models/meeting.dart';
 import 'staff_history_page.dart';
 import 'staff_notifications_page.dart';
@@ -16,7 +16,7 @@ class StaffHomePage extends StatefulWidget {
 }
 
 class _StaffHomePageState extends State<StaffHomePage> {
-  final LocalStorageService _storageService = LocalStorageService();
+  final MeetingService _meetingService = MeetingService();
   List<Meeting> _meetings = [];
   bool _isLoading = true;
   int _selectedTab = 0;
@@ -28,7 +28,7 @@ class _StaffHomePageState extends State<StaffHomePage> {
   }
 
   Future<void> _loadMeetings() async {
-    final meetings = await _storageService.getMeetings();
+    final meetings = await _meetingService.getMeetings();
     if (!mounted) return;
     setState(() {
       _meetings = meetings;
@@ -40,13 +40,13 @@ class _StaffHomePageState extends State<StaffHomePage> {
     Meeting meeting,
     MeetingStatus status,
   ) async {
-    await _storageService.updateMeetingStatus(
-      meeting.id,
-      status,
-      status == MeetingStatus.accepted
-          ? 'Accepted by faculty'
-          : 'Rejected by faculty',
-    );
+    if (status == MeetingStatus.accepted) {
+      await _meetingService.acceptMeeting(meeting.id);
+    } else if (status == MeetingStatus.rejected) {
+      await _meetingService.rejectMeeting(meeting.id);
+    } else {
+      await _meetingService.completeMeeting(meeting.id);
+    }
     await _loadMeetings();
   }
 
@@ -88,28 +88,12 @@ class _StaffHomePageState extends State<StaffHomePage> {
     );
 
     if (shouldSave == true) {
-      final meetings = await _storageService.getMeetings();
-      final index = meetings.indexWhere((item) => item.id == meeting.id);
-      if (index >= 0) {
-        meetings[index] = Meeting(
-          id: meeting.id,
-          facultyName: meeting.facultyName,
-          facultyDept: meeting.facultyDept,
-          purpose: meeting.purpose,
-          time: updatedTime.trim().isEmpty ? null : updatedTime.trim(),
-          location: updatedLocation.trim().isEmpty
-              ? null
-              : updatedLocation.trim(),
-          status: meeting.status,
-          cardColorValue: meeting.cardColorValue,
-          isPinned: meeting.isPinned,
-          requestedAt: meeting.requestedAt,
-          denialReason: meeting.denialReason,
-          studentName: meeting.studentName,
-        );
-        await _storageService.saveMeetings(meetings);
-        await _loadMeetings();
-      }
+      await _meetingService.editMeetingDetails(
+        meeting.id,
+        time: updatedTime.trim().isEmpty ? null : updatedTime.trim(),
+        location: updatedLocation.trim().isEmpty ? null : updatedLocation.trim(),
+      );
+      await _loadMeetings();
     }
   }
 
