@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'src/backend/auth_service.dart';
+import 'src/frontend/admin/admin_home_page.dart';
 import 'src/frontend/login/login_page.dart';
 import 'src/frontend/staff/pages/staff_home_page.dart';
 import 'src/frontend/student/pages/student_home_page.dart';
@@ -59,6 +60,8 @@ class _MyAppState extends State<MyApp> {
           ? const StudentHomePage()
           : _role == UserRole.staff
               ? const StaffHomePage()
+              : _role == UserRole.admin
+                  ? const AdminHomePage()
               : const LoginPage(),
     );
   }

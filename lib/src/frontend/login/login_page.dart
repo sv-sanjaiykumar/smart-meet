@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../backend/auth_service.dart';
+import '../admin/admin_home_page.dart';
 import '../student/pages/student_home_page.dart';
 import '../staff/pages/staff_home_page.dart';
 
@@ -48,7 +49,11 @@ class _LoginPageState extends State<LoginPage> {
     }
 
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const StaffHomePage()),
+      MaterialPageRoute(
+        builder: (_) => result.role == UserRole.admin
+            ? const AdminHomePage()
+            : const StaffHomePage(),
+      ),
     );
   }
 

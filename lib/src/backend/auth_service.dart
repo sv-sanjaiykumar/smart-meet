@@ -6,7 +6,7 @@ import 'models/user_model.dart';
 
 export 'models/user_model.dart' show UserModel;
 
-enum UserRole { student, staff }
+enum UserRole { student, staff, admin }
 
 class AuthResult {
   const AuthResult({
@@ -89,6 +89,13 @@ class AuthService {
       department: 'AI&ML',
       designation: 'Professor',
     ),
+    const UserModel(
+      username: 'admin',
+      password: 'admin123',
+      role: UserRole.admin,
+      displayName: 'Smart Meet Admin',
+      email: 'admin@college.edu',
+    ),
   ];
 
   // ── helpers ───────────────────────────────────────────────────────────────
@@ -96,12 +103,32 @@ class AuthService {
   /// Ensures seed accounts exist in SharedPreferences.
   Future<void> _ensureUsersSeeded() async {
     final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey(_usersKey)) return;
+    final raw = prefs.getString(_usersKey);
+    if (raw == null || raw.isEmpty) {
+      await prefs.setString(
+        _usersKey,
+        jsonEncode(_seedAccounts.map((u) => u.toJson()).toList()),
+      );
+      return;
+    }
 
-    final encoded = jsonEncode(
-      _seedAccounts.map((u) => u.toJson()).toList(),
-    );
-    await prefs.setString(_usersKey, encoded);
+    try {
+      final users = (jsonDecode(raw) as List<dynamic>)
+          .map((e) => UserModel.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (!users.any((user) => user.role == UserRole.admin)) {
+        users.add(_seedAccounts.last);
+        await prefs.setString(
+          _usersKey,
+          jsonEncode(users.map((user) => user.toJson()).toList()),
+        );
+      }
+    } on FormatException {
+      await prefs.setString(
+        _usersKey,
+        jsonEncode(_seedAccounts.map((u) => u.toJson()).toList()),
+      );
+    }
   }
 
   /// Loads all user accounts from storage.
@@ -203,6 +230,98 @@ class AuthService {
   Future<List<UserModel>> getAllStudents() async {
     final users = await _loadUsers();
     return users.where((u) => u.role == UserRole.student).toList();
+  }
+
+  /// Returns staff and student accounts to the signed-in administrator.
+  Future<List<UserModel>> getManagedAccounts() async {
+    if (await getCurrentRole() != UserRole.admin) {
+      throw StateError('Only administrators can view managed accounts.');
+    }
+    final users = await _loadUsers();
+    return users.where((user) => user.role != UserRole.admin).toList();
+  }
+
+  /// Creates a staff or student account for the signed-in administrator.
+  Future<AuthResult> createManagedAccount({
+    required String username,
+    required String password,
+    required UserRole role,
+    required String displayName,
+    required String email,
+    required String department,
+    String? studentId,
+    String? designation,
+  }) async {
+    if (await getCurrentRole() != UserRole.admin) {
+      return const AuthResult(
+        isSuccess: false,
+        role: null,
+        message: 'Only administrators can create accounts.',
+      );
+    }
+    if (role == UserRole.admin) {
+      return const AuthResult(
+        isSuccess: false,
+        role: null,
+        message: 'Only staff and student accounts can be created here.',
+      );
+    }
+
+    final normalizedUsername = username.trim().toLowerCase();
+    final normalizedEmail = email.trim().toLowerCase();
+    final normalizedName = displayName.trim();
+    final normalizedDepartment = department.trim();
+    final normalizedPassword = password.trim();
+    if (normalizedUsername.length < 3 ||
+        normalizedPassword.length < 6 ||
+        normalizedName.isEmpty ||
+        !normalizedEmail.contains('@') ||
+        normalizedDepartment.isEmpty ||
+        (role == UserRole.student && (studentId?.trim().isNotEmpty != true)) ||
+        (role == UserRole.staff && (designation?.trim().isNotEmpty != true))) {
+      return const AuthResult(
+        isSuccess: false,
+        role: null,
+        message: 'Please provide valid details for all required fields.',
+      );
+    }
+
+    final users = await _loadUsers();
+    if (users.any(
+      (user) =>
+          user.username.toLowerCase() == normalizedUsername ||
+          user.email.toLowerCase() == normalizedEmail,
+    )) {
+      return const AuthResult(
+        isSuccess: false,
+        role: null,
+        message: 'That username or email is already in use.',
+      );
+    }
+
+    final account = UserModel(
+      username: normalizedUsername,
+      password: normalizedPassword,
+      role: role,
+      displayName: normalizedName,
+      email: normalizedEmail,
+      department: normalizedDepartment,
+      studentId: role == UserRole.student ? studentId?.trim() : null,
+      designation: role == UserRole.staff ? designation?.trim() : null,
+    );
+    users.add(account);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _usersKey,
+      jsonEncode(users.map((user) => user.toJson()).toList()),
+    );
+
+    return AuthResult(
+      isSuccess: true,
+      role: role,
+      message: 'Account created successfully.',
+      user: account,
+    );
   }
 
   /// Updates a user's profile fields (name, department, designation, etc.)
