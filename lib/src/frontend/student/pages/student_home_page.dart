@@ -40,6 +40,17 @@ class _StudentHomePageState extends State<StudentHomePage> {
     final user = await _authService.getCurrentUser();
     final loadedMeetings = await _storageService.getMeetings();
     if (!mounted) return;
+
+    // Pinned meetings first, then newest
+    loadedMeetings.sort((a, b) {
+      if (a.isPinned && !b.isPinned) return -1;
+      if (!a.isPinned && b.isPinned) return 1;
+      if (a.createdAt != null && b.createdAt != null) {
+        return b.createdAt!.compareTo(a.createdAt!);
+      }
+      return b.requestedAt.compareTo(a.requestedAt);
+    });
+
     setState(() {
       _studentName = user?.displayName ?? 'Student';
       meetings = loadedMeetings;
@@ -58,7 +69,7 @@ class _StudentHomePageState extends State<StudentHomePage> {
       case 3:
         return const NotificationsPage();
       case 4:
-        return const ProfilePage();
+        return ProfilePage(onProfileUpdated: _loadMeetings);
       default:
         return _buildHome(context);
     }
@@ -137,17 +148,6 @@ class _StudentHomePageState extends State<StudentHomePage> {
     if (result == true) {
       _loadMeetings(); // Refresh the counts and list on the home page
     }
-  }
-
-  String _destinationTitle(int index) {
-    const titles = [
-      'Home',
-      'Request Monitoring',
-      'Create a meeting',
-      'Notifications',
-      'Your profile',
-    ];
-    return titles[index];
   }
 
   Widget _buildHome(BuildContext context) {
@@ -455,12 +455,21 @@ class _StudentHomePageState extends State<StudentHomePage> {
                               ),
                             ),
                           ),
-                          Icon(
-                            meeting.isPinned
-                                ? Icons.push_pin
-                                : Icons.push_pin_outlined,
-                            color: Colors.white,
-                            size: 20,
+                          GestureDetector(
+                            onTap: () async {
+                              await _storageService.togglePin(
+                                meeting.id,
+                                !meeting.isPinned,
+                              );
+                              _loadMeetings();
+                            },
+                            child: Icon(
+                              meeting.isPinned
+                                  ? Icons.push_pin
+                                  : Icons.push_pin_outlined,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
                         ],
                       ),
@@ -533,12 +542,4 @@ class _StudentHomePageState extends State<StudentHomePage> {
     );
   }
 
-  Widget _buildPlaceholder(String title) {
-    return Center(
-      child: Text(
-        title,
-        style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w500),
-      ),
-    );
-  }
 }

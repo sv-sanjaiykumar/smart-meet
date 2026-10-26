@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../student/models/meeting.dart';
+import '../theme/staff_theme.dart';
 
 class StaffHistoryPage extends StatefulWidget {
   const StaffHistoryPage({
@@ -18,9 +19,9 @@ class StaffHistoryPage extends StatefulWidget {
 }
 
 class _StaffHistoryPageState extends State<StaffHistoryPage> {
-  static const _ink = Color(0xFF171717);
-  static const _muted = Color(0xFF777777);
-  static const _accent = Color(0xFFD954E8);
+  static const _ink = StaffColors.ink;
+  static const _muted = StaffColors.mutedInk;
+  static const _accent = StaffColors.primary;
 
   late DateTime _selectedDate;
   bool _newestFirst = true;

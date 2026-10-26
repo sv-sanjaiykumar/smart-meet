@@ -22,6 +22,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
   final _usernameController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _adminPasswordController = TextEditingController();
   final _departmentController = TextEditingController();
   final _studentIdController = TextEditingController();
   final _designationController = TextEditingController();
@@ -46,6 +47,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
     _usernameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+    _adminPasswordController.dispose();
     _departmentController.dispose();
     _studentIdController.dispose();
     _designationController.dispose();
@@ -85,6 +87,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
         displayName: _nameController.text,
         email: _emailController.text,
         department: _departmentController.text,
+        adminPassword: _adminPasswordController.text.trim(),
         studentId: _studentIdController.text,
         designation: _designationController.text,
       );
@@ -99,6 +102,7 @@ class _AdminHomePageState extends State<AdminHomePage> {
       _usernameController.clear();
       _emailController.clear();
       _passwordController.clear();
+      // Keep adminPasswordController filled for convenience
       _departmentController.clear();
       _studentIdController.clear();
       _designationController.clear();
@@ -411,6 +415,34 @@ class _AdminHomePageState extends State<AdminHomePage> {
                 Icons.work_outline,
               ),
             ],
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: const Color(0xFFFFF8E1),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: const Color(0xFFFFE082)),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline, color: Color(0xFFF59E0B), size: 18),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Your password is needed to keep you signed in after creating the new account.',
+                      style: TextStyle(fontSize: 12, color: Color(0xFF92400E)),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            _textField(
+              _adminPasswordController,
+              'Your admin password',
+              Icons.admin_panel_settings_outlined,
+              obscureText: true,
+            ),
             const SizedBox(height: 18),
             SizedBox(
               width: double.infinity,

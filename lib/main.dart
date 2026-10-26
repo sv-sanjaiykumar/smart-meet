@@ -1,5 +1,7 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 
+import 'firebase_options.dart';
 import 'src/backend/auth_service.dart';
 import 'src/frontend/admin/admin_home_page.dart';
 import 'src/frontend/login/login_page.dart';
@@ -7,8 +9,11 @@ import 'src/frontend/staff/pages/staff_home_page.dart';
 import 'src/frontend/student/pages/student_home_page.dart';
 import 'src/frontend/student/theme/student_theme.dart';
 
-void main() {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(
+    options: DefaultFirebaseOptions.currentPlatform,
+  );
   runApp(const MyApp());
 }
 

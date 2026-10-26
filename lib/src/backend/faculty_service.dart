@@ -1,173 +1,106 @@
-import 'dart:convert';
-
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'models/faculty_model.dart';
 
 export 'models/faculty_model.dart';
 
-/// Provides a faculty directory for the meeting-request sheet.
+/// Provides a faculty directory fetched directly from Firebase Firestore.
 ///
-/// The list is seeded from [_defaultFaculty] on first launch and can be
-/// updated dynamically (e.g., when a staff member edits their profile).
+/// Faculty accounts are loaded from the 'users' collection where role == 'staff'.
+/// Legacy local storage mocks are purged automatically.
 class FacultyService {
-  static const String _key = 'smart_meet_faculty_directory';
-
-  // ── Default faculty list ──────────────────────────────────────────────────
-  static const List<Map<String, dynamic>> _defaultFaculty = [
-    // CSE
-    {
-      'id': 'fac_001',
-      'name': 'Prof. Anushka Sharma',
-      'department': 'CSE',
-      'designation': 'Associate Professor',
-      'specialization': 'Machine Learning',
-      'email': 'anushka@college.edu',
-      'isAvailable': true,
-    },
-    {
-      'id': 'fac_002',
-      'name': 'Dr. Ramesh Kumar',
-      'department': 'CSE',
-      'designation': 'Professor',
-      'specialization': 'Database Systems',
-      'email': 'ramesh@college.edu',
-      'isAvailable': true,
-    },
-    {
-      'id': 'fac_003',
-      'name': 'Dr. Kavya Sree',
-      'department': 'CSE',
-      'designation': 'Assistant Professor',
-      'specialization': 'Web Technologies',
-      'email': 'kavya@college.edu',
-      'isAvailable': true,
-    },
-    // ECE
-    {
-      'id': 'fac_004',
-      'name': 'Prof. Anwar Raja',
-      'department': 'ECE',
-      'designation': 'Assistant Professor',
-      'specialization': 'MicroControllers',
-      'email': 'anwar@college.edu',
-      'isAvailable': true,
-    },
-    {
-      'id': 'fac_005',
-      'name': 'Dr. Sunitha Devi',
-      'department': 'ECE',
-      'designation': 'Professor',
-      'specialization': 'VLSI Design',
-      'email': 'sunitha@college.edu',
-      'isAvailable': true,
-    },
-    {
-      'id': 'fac_006',
-      'name': 'Mr. Vijay Kumar',
-      'department': 'ECE',
-      'designation': 'Assistant Professor',
-      'specialization': 'Embedded Systems',
-      'email': 'vijay@college.edu',
-      'isAvailable': false,
-    },
-    // AI&ML
-    {
-      'id': 'fac_007',
-      'name': 'Prof. Lakshmanan',
-      'department': 'AI&ML',
-      'designation': 'Professor',
-      'specialization': 'Deep Learning',
-      'email': 'lakshmanan@college.edu',
-      'isAvailable': true,
-    },
-    {
-      'id': 'fac_008',
-      'name': 'Dr. Pooja Mehta',
-      'department': 'AI&ML',
-      'designation': 'Associate Professor',
-      'specialization': 'Computer Vision',
-      'email': 'pooja@college.edu',
-      'isAvailable': true,
-    },
-    // CSE-B
-    {
-      'id': 'fac_009',
-      'name': 'Dr. Alexa Maryam',
-      'department': 'CSE-B',
-      'designation': 'Assistant Professor',
-      'specialization': 'Cloud Computing',
-      'email': 'alexa@college.edu',
-      'isAvailable': true,
-    },
-    {
-      'id': 'fac_010',
-      'name': 'Mr. Suresh Babu',
-      'department': 'CSE-B',
-      'designation': 'Lecturer',
-      'specialization': 'Operating Systems',
-      'email': 'suresh@college.edu',
-      'isAvailable': true,
-    },
-  ];
-
-  // ── Internal helpers ──────────────────────────────────────────────────────
-
-  Future<void> _ensureSeeded() async {
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.containsKey(_key)) return;
-    await prefs.setString(_key, jsonEncode(_defaultFaculty));
+  FacultyService({FirebaseFirestore? db}) : _injectedDb = db {
+    _cleanLegacyLocalStorage();
   }
 
-  Future<List<FacultyModel>> _load() async {
-    await _ensureSeeded();
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_key);
-    if (raw == null || raw.isEmpty) return [];
+  final FirebaseFirestore? _injectedDb;
+
+  FirebaseFirestore? get _db {
+    if (_injectedDb != null) return _injectedDb;
     try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list
-          .map((e) => FacultyModel.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } on FormatException {
-      await prefs.remove(_key);
-      return _defaultFaculty
-          .map((e) => FacultyModel.fromJson(e))
-          .toList();
+      return FirebaseFirestore.instance;
+    } catch (_) {
+      return null;
     }
   }
 
-  Future<void> _save(List<FacultyModel> faculty) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _key,
-      jsonEncode(faculty.map((f) => f.toJson()).toList()),
-    );
+  static void _cleanLegacyLocalStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey('smart_meet_faculty_directory')) {
+        await prefs.remove('smart_meet_faculty_directory');
+      }
+    } catch (_) {}
   }
 
-  // ── Public API ────────────────────────────────────────────────────────────
+  /// Returns all faculty members directly from Firestore 'users' collection.
+  Future<List<FacultyModel>> getAllFaculty() async {
+    final db = _db;
+    if (db == null) return [];
 
-  /// Returns all faculty members in the directory.
-  Future<List<FacultyModel>> getAllFaculty() => _load();
+    try {
+      final snap = await db
+          .collection('users')
+          .where('role', isEqualTo: 'staff')
+          .get();
+
+      final list = snap.docs.map((doc) {
+        final data = doc.data();
+        final rawName = data['displayName'] as String? ??
+            data['username'] as String? ??
+            'Faculty';
+        final rawDept = data['department'] as String? ?? 'CSE';
+        final rawDesignation = data['designation'] as String? ?? 'Professor';
+        final rawSpec = data['specialization'] as String?;
+        final rawEmail = data['email'] as String? ?? '';
+        final isAvailable = data['isAvailable'] as bool? ?? true;
+
+        return FacultyModel(
+          id: doc.id,
+          name: rawName,
+          department: rawDept,
+          designation: rawDesignation,
+          specialization: rawSpec,
+          email: rawEmail,
+          isAvailable: isAvailable,
+        );
+      }).toList();
+
+      list.sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+      return list;
+    } catch (e) {
+      debugPrint('❌ Error fetching faculty from Firestore: $e');
+      return [];
+    }
+  }
 
   /// Returns faculty filtered by [department] (case-insensitive).
   Future<List<FacultyModel>> getFacultyByDepartment(String department) async {
-    final all = await _load();
+    final all = await getAllFaculty();
+    if (department.toLowerCase() == 'all') return all;
     return all
         .where((f) => f.department.toLowerCase() == department.toLowerCase())
         .toList();
   }
 
-  /// Returns all departments that have at least one faculty member.
+  /// Returns all distinct departments that have at least one faculty member.
   Future<List<String>> getDepartments() async {
-    final all = await _load();
-    return all.map((f) => f.department).toSet().toList()..sort();
+    final all = await getAllFaculty();
+    final depts = all
+        .map((f) => f.department.trim())
+        .where((d) => d.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
+    return depts;
   }
 
-  /// Searches faculty by name or department (case-insensitive substring match).
+  /// Searches faculty by name, department, designation, or specialization.
   Future<List<FacultyModel>> search(String query) async {
-    if (query.trim().isEmpty) return _load();
-    final all = await _load();
+    final all = await getAllFaculty();
+    if (query.trim().isEmpty) return all;
     final q = query.trim().toLowerCase();
     return all
         .where(
@@ -180,45 +113,44 @@ class FacultyService {
         .toList();
   }
 
-  /// Updates a faculty member's availability status.
+  /// Updates a faculty member's availability status in Firestore.
   Future<void> setAvailability(String facultyId, {required bool isAvailable}) async {
-    final all = await _load();
-    final index = all.indexWhere((f) => f.id == facultyId);
-    if (index == -1) return;
-    final old = all[index];
-    all[index] = FacultyModel(
-      id: old.id,
-      name: old.name,
-      department: old.department,
-      designation: old.designation,
-      specialization: old.specialization,
-      email: old.email,
-      isAvailable: isAvailable,
-    );
-    await _save(all);
+    final db = _db;
+    if (db == null) return;
+    try {
+      await db.collection('users').doc(facultyId).update({
+        'isAvailable': isAvailable,
+      });
+    } catch (e) {
+      debugPrint('❌ Error updating availability in Firestore: $e');
+    }
   }
 
-  /// Updates a faculty member's profile fields (name, designation, specialization).
-  /// Called when staff save their profile in [StaffProfilePage].
+  /// Updates a faculty member's profile fields in Firestore.
   Future<void> updateFacultyProfile(
     String facultyId, {
     String? name,
     String? designation,
     String? specialization,
   }) async {
-    final all = await _load();
-    final index = all.indexWhere((f) => f.id == facultyId);
-    if (index == -1) return;
-    final old = all[index];
-    all[index] = FacultyModel(
-      id: old.id,
-      name: name ?? old.name,
-      department: old.department,
-      designation: designation ?? old.designation,
-      specialization: specialization ?? old.specialization,
-      email: old.email,
-      isAvailable: old.isAvailable,
-    );
-    await _save(all);
+    final db = _db;
+    if (db == null) return;
+    try {
+      final updates = <String, dynamic>{};
+      if (name != null && name.trim().isNotEmpty) {
+        updates['displayName'] = name.trim();
+      }
+      if (designation != null && designation.trim().isNotEmpty) {
+        updates['designation'] = designation.trim();
+      }
+      if (specialization != null) {
+        updates['specialization'] = specialization.trim();
+      }
+      if (updates.isNotEmpty) {
+        await db.collection('users').doc(facultyId).update(updates);
+      }
+    } catch (e) {
+      debugPrint('❌ Error updating faculty profile in Firestore: $e');
+    }
   }
 }

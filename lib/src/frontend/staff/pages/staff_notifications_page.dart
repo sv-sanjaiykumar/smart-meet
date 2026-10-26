@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../student/models/meeting.dart';
+import '../theme/staff_theme.dart';
 
 class StaffNotificationsPage extends StatefulWidget {
   const StaffNotificationsPage({
@@ -23,9 +24,9 @@ class StaffNotificationsPage extends StatefulWidget {
 
 class _StaffNotificationsPageState extends State<StaffNotificationsPage>
     with SingleTickerProviderStateMixin {
-  static const _ink = Color(0xFF171717);
-  static const _muted = Color(0xFF777777);
-  static const _blue = Color(0xFF4B91FF);
+  static const _ink = StaffColors.ink;
+  static const _muted = StaffColors.mutedInk;
+  static const _blue = StaffColors.primary;
 
   late final TabController _tabController;
   bool _newestFirst = true;

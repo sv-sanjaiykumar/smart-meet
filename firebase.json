@@ -1,0 +1,48 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "smart-meet-779bc",
+          "appId": "1:893095528654:android:5005ae1767793578fd689f",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "ios": {
+        "default": {
+          "projectId": "smart-meet-779bc",
+          "appId": "1:893095528654:ios:d5d4115f9a1ffb35fd689f",
+          "uploadDebugSymbols": false,
+          "fileOutput": "ios/Runner/GoogleService-Info.plist"
+        }
+      },
+      "macos": {
+        "default": {
+          "projectId": "smart-meet-779bc",
+          "appId": "1:893095528654:ios:d5d4115f9a1ffb35fd689f",
+          "uploadDebugSymbols": false,
+          "fileOutput": "macos/Runner/GoogleService-Info.plist"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "smart-meet-779bc",
+          "configurations": {
+            "android": "1:893095528654:android:5005ae1767793578fd689f",
+            "ios": "1:893095528654:ios:d5d4115f9a1ffb35fd689f",
+            "macos": "1:893095528654:ios:d5d4115f9a1ffb35fd689f",
+            "web": "1:893095528654:web:cdac294a6a3a0880fd689f",
+            "windows": "1:893095528654:web:69a1b7073613e50ffd689f"
+          }
+        }
+      }
+    }
+  }
+}

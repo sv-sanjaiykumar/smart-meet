@@ -20,30 +20,36 @@ class StudentProfileService {
 
   /// Returns the student's editable profile fields.
   ///
-  /// Falls back to values from [UserModel] if the user has never saved
-  /// a custom profile.
+  /// Prioritizes live data from Firestore [UserModel], falling back to
+  /// local cache or defaults.
   Future<Map<String, String>> getProfile(String username) async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_profileKey(username));
 
-    // Load the canonical user so we have good defaults.
+    // Load the canonical user from Firestore via AuthService.
     final user = await AuthService().getCurrentUser();
     final defaults = <String, String>{
-      'name': user?.displayName ?? _formatUsername(username),
+      'name': (user?.displayName != null && user!.displayName.isNotEmpty)
+          ? user.displayName
+          : _formatUsername(username),
       'studentId': user?.studentId ?? '',
       'department': user?.department ?? '',
-      'email': user?.email ?? username,
-      'year': '',
-      'section': '',
+      'email': (user?.email != null && user!.email.isNotEmpty)
+          ? user.email
+          : username,
+      'year': user?.year ?? '',
+      'section': user?.section ?? '',
     };
 
     if (raw != null && raw.isNotEmpty) {
       try {
         final decoded = jsonDecode(raw) as Map<String, dynamic>;
         for (final key in defaults.keys) {
-          final value = decoded[key];
-          if (value is String && value.isNotEmpty) {
-            defaults[key] = value;
+          if (defaults[key]!.isEmpty) {
+            final value = decoded[key];
+            if (value is String && value.isNotEmpty) {
+              defaults[key] = value;
+            }
           }
         }
       } on FormatException {
@@ -51,21 +57,28 @@ class StudentProfileService {
       }
     }
 
+    // Keep local cache synchronized with resolved values
+    await prefs.setString(_profileKey(username), jsonEncode(defaults));
+
     return defaults;
   }
 
-  /// Saves [updates] for [username].  Only the provided keys are overwritten.
+  /// Saves [updates] for [username] to Firestore DB and updates local cache.
   Future<void> saveProfile(
     String username,
     Map<String, String> updates,
   ) async {
     final existing = await getProfile(username);
     final merged = {...existing, ...updates};
+
+    // 1. Update Firestore DB and sync Auth display name
+    final currentUser = await AuthService().getCurrentUser();
+    final targetUid = currentUser?.uid ?? username;
+    await AuthService().updateUserProfile(targetUid, updates);
+
+    // 2. Cache locally in SharedPreferences
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_profileKey(username), jsonEncode(merged));
-
-    // Also update the canonical UserModel so other services see fresh data.
-    await AuthService().updateUserProfile(username, updates);
   }
 
   // ── Settings ──────────────────────────────────────────────────────────────

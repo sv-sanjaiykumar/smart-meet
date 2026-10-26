@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "893095528654",
+    "project_id": "smart-meet-779bc",
+    "storage_bucket": "smart-meet-779bc.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:893095528654:android:5005ae1767793578fd689f",
+        "android_client_info": {
+          "package_name": "com.example.smart_meet"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "893095528654-6cub0rl5m62g0sldc6vq47qb7ijoh5l6.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAcSgXIb3ho4kbtVdBJtxIQR9iePvJjadw"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "893095528654-6cub0rl5m62g0sldc6vq47qb7ijoh5l6.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

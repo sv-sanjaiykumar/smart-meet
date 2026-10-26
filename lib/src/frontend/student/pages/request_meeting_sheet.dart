@@ -75,19 +75,45 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
       _allFaculty = faculty;
       _departments = depts;
       _loadingFaculty = false;
+      if (_departments.isNotEmpty && !_departments.contains(_selectedDept) && _selectedDept != 'All') {
+        _selectedDept = _departments.first;
+      }
       _applyFilters();
     });
   }
 
   void _onSearchChanged() => setState(_applyFilters);
 
+  bool _matchesDesignation(String actual, String filter) {
+    final a = actual.toLowerCase().trim();
+    final f = filter.toLowerCase().trim();
+    if (a == f) return true;
+    if ((a == 'ap' || a == 'assistant professor' || a == 'asst prof' || a == 'asst. prof') &&
+        (f == 'ap' || f == 'assistant professor' || f == 'asst prof' || f == 'asst. prof')) {
+      return true;
+    }
+    if ((a == 'asp' || a == 'associate professor' || a == 'assoc prof' || a == 'assoc. prof') &&
+        (f == 'asp' || f == 'associate professor' || f == 'assoc prof' || f == 'assoc. prof')) {
+      return true;
+    }
+    if ((a == 'prof' || a == 'professor') && (f == 'prof' || f == 'professor')) {
+      return true;
+    }
+    return false;
+  }
+
   void _applyFilters() {
-    var list = _allFaculty
-        .where((f) => f.department == _selectedDept)
-        .toList();
+    var list = _allFaculty;
+    if (_selectedDept != 'All') {
+      list = list
+          .where((f) => f.department.toLowerCase() == _selectedDept.toLowerCase())
+          .toList();
+    }
 
     if (_selectedDesignation != null) {
-      list = list.where((f) => f.designation == _selectedDesignation).toList();
+      list = list
+          .where((f) => _matchesDesignation(f.designation, _selectedDesignation!))
+          .toList();
     }
 
     final q = _searchController.text.trim().toLowerCase();
@@ -96,7 +122,9 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
           .where(
             (f) =>
                 f.name.toLowerCase().contains(q) ||
-                (f.specialization?.toLowerCase().contains(q) ?? false),
+                (f.specialization?.toLowerCase().contains(q) ?? false) ||
+                f.designation.toLowerCase().contains(q) ||
+                f.department.toLowerCase().contains(q),
           )
           .toList();
     }
@@ -133,7 +161,10 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
         facultyName: facultyName,
         facultyDept: facultyDept,
         purpose: _selectedPurpose!,
-        // Use the first matching staff username if available
+        facultyUid: _selectedFaculty?.id,
+        facultyEmail: _selectedFaculty?.email,
+        meetingDate: _selectedDate,
+        // Use the matching staff username if available
         staffUsername: _staffUsernameFor(facultyName),
       );
 
@@ -157,9 +188,14 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
     }
   }
 
-  /// Best-effort mapping from faculty display name to a staff username.
+  /// Best-effort mapping from faculty display name or email to a staff username.
   String _staffUsernameFor(String facultyName) {
+    if (_selectedFaculty?.email != null &&
+        _selectedFaculty!.email!.contains('@')) {
+      return _selectedFaculty!.email!.split('@').first;
+    }
     final lower = facultyName.toLowerCase();
+    if (lower.contains('kumar')) return 'kumar.staff';
     if (lower.contains('anushka')) return 'anushka';
     if (lower.contains('lakshmanan')) return 'lakshmanan';
     if (lower.contains('anwar')) return 'staff';
@@ -260,9 +296,12 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
                 scrollDirection: Axis.horizontal,
                 clipBehavior: Clip.none,
                 child: Row(
-                  children: _departments
-                      .map((d) => _buildDeptChip(d, _selectedDept == d))
-                      .toList(),
+                  children: [
+                    if (_departments.length > 1)
+                      _buildDeptChip('All', _selectedDept == 'All'),
+                    ..._departments
+                        .map((d) => _buildDeptChip(d, _selectedDept == d)),
+                  ],
                 ),
               )
             else
@@ -503,7 +542,7 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
                   ? StudentColors.primary.withValues(alpha: 0.15)
                   : Colors.grey[200],
               child: Text(
-                faculty.name.trim().split(' ').last[0].toUpperCase(),
+                _getInitial(faculty.name),
                 style: TextStyle(
                   color: isSelected ? StudentColors.primary : Colors.grey[600],
                   fontWeight: FontWeight.bold,
@@ -524,19 +563,16 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
                       color: isSelected ? StudentColors.primary : Colors.black87,
                     ),
                   ),
-                  if (faculty.specialization != null)
-                    Text(
-                      '${faculty.designation} · ${faculty.specialization}',
-                      style: const TextStyle(
-                        color: Colors.grey,
-                        fontSize: 12,
-                      ),
-                    )
-                  else
-                    Text(
-                      faculty.designation,
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  Text(
+                    faculty.specialization != null &&
+                            faculty.specialization!.isNotEmpty
+                        ? '${_formatDesignation(faculty.designation)} · ${faculty.specialization}'
+                        : '${_formatDesignation(faculty.designation)} · ${faculty.department}',
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
                     ),
+                  ),
                 ],
               ),
             ),
@@ -637,5 +673,19 @@ class _RequestMeetingSheetState extends State<RequestMeetingSheet> {
       _ => 'th',
     };
     return '${DateFormat('MMMM').format(date)} $day$suffix';
+  }
+
+  String _getInitial(String name) {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) return 'F';
+    return trimmed[0].toUpperCase();
+  }
+
+  String _formatDesignation(String d) {
+    final lower = d.toLowerCase().trim();
+    if (lower == 'ap') return 'Assistant Professor';
+    if (lower == 'asp') return 'Associate Professor';
+    if (lower == 'prof') return 'Professor';
+    return d;
   }
 }

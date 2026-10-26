@@ -1,6 +1,6 @@
-import 'dart:convert';
-
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 
 import 'models/user_model.dart';
 
@@ -22,226 +22,220 @@ class AuthResult {
   final UserModel? user;
 }
 
-/// Manages authentication for Smart Meet.
+/// Manages authentication for Smart Meet using Firebase Auth + Firestore.
 ///
-/// Accounts are seeded from [_seedAccounts] on first launch and persisted to
-/// SharedPreferences so future sign-ins work without a network call.
+/// Flow:
+///  - Admin creates staff/student accounts (Firebase Auth user + Firestore doc).
+///    Admin must supply their own password so the service can restore the
+///    admin session after creating the new account.
+///  - Staff/Students sign in with email + password via Firebase Auth.
+///  - Role is stored in the Firestore 'users' collection.
 class AuthService {
-  // ── storage keys ──────────────────────────────────────────────────────────
-  static const String _sessionKey = 'smart_meet_user_session';
-  static const String _usersKey = 'smart_meet_users';
+  static const String _usersCollection = 'users';
 
-  // ── seed accounts ─────────────────────────────────────────────────────────
-  static final List<UserModel> _seedAccounts = [
-    // ── Students ──────────────────────────────────────────────────────────
-    const UserModel(
-      username: 'student',
-      password: 'student123',
-      role: UserRole.student,
-      displayName: 'Thoufik',
-      email: 'thoufik@college.edu',
-      department: 'CSE',
-      studentId: '2025CS101',
-    ),
-    const UserModel(
-      username: 'priya',
-      password: 'priya123',
-      role: UserRole.student,
-      displayName: 'Priya Nair',
-      email: 'priya@college.edu',
-      department: 'ECE',
-      studentId: '2025EC202',
-    ),
-    const UserModel(
-      username: 'arjun',
-      password: 'arjun123',
-      role: UserRole.student,
-      displayName: 'Arjun Menon',
-      email: 'arjun@college.edu',
-      department: 'AI&ML',
-      studentId: '2025AI303',
-    ),
-    // ── Staff ─────────────────────────────────────────────────────────────
-    const UserModel(
-      username: 'staff',
-      password: 'staff123',
-      role: UserRole.staff,
-      displayName: 'Anwar Raja',
-      email: 'anwar@college.edu',
-      department: 'ECE',
-      designation: 'Assistant Professor',
-    ),
-    const UserModel(
-      username: 'anushka',
-      password: 'anushka123',
-      role: UserRole.staff,
-      displayName: 'Anushka Sharma',
-      email: 'anushka@college.edu',
-      department: 'CSE',
-      designation: 'Associate Professor',
-    ),
-    const UserModel(
-      username: 'lakshmanan',
-      password: 'lak123',
-      role: UserRole.staff,
-      displayName: 'Prof. Lakshmanan',
-      email: 'lakshmanan@college.edu',
-      department: 'AI&ML',
-      designation: 'Professor',
-    ),
-    const UserModel(
-      username: 'admin',
-      password: 'admin123',
-      role: UserRole.admin,
-      displayName: 'Smart Meet Admin',
-      email: 'admin@college.edu',
-    ),
-  ];
+  final FirebaseAuth _auth = FirebaseAuth.instance;
+  final FirebaseFirestore _db = FirebaseFirestore.instance;
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
-  /// Ensures seed accounts exist in SharedPreferences.
-  Future<void> _ensureUsersSeeded() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_usersKey);
-    if (raw == null || raw.isEmpty) {
-      await prefs.setString(
-        _usersKey,
-        jsonEncode(_seedAccounts.map((u) => u.toJson()).toList()),
-      );
-      return;
-    }
-
-    try {
-      final users = (jsonDecode(raw) as List<dynamic>)
-          .map((e) => UserModel.fromJson(e as Map<String, dynamic>))
-          .toList();
-      if (!users.any((user) => user.role == UserRole.admin)) {
-        users.add(_seedAccounts.last);
-        await prefs.setString(
-          _usersKey,
-          jsonEncode(users.map((user) => user.toJson()).toList()),
-        );
-      }
-    } on FormatException {
-      await prefs.setString(
-        _usersKey,
-        jsonEncode(_seedAccounts.map((u) => u.toJson()).toList()),
-      );
+  /// Converts a Firestore role string to [UserRole].
+  UserRole _roleFromString(String? raw) {
+    switch (raw) {
+      case 'admin':
+        return UserRole.admin;
+      case 'staff':
+        return UserRole.staff;
+      default:
+        return UserRole.student;
     }
   }
 
-  /// Loads all user accounts from storage.
-  Future<List<UserModel>> _loadUsers() async {
-    await _ensureUsersSeeded();
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_usersKey);
-    if (raw == null || raw.isEmpty) return [];
-    try {
-      final list = jsonDecode(raw) as List<dynamic>;
-      return list
-          .map((e) => UserModel.fromJson(e as Map<String, dynamic>))
-          .toList();
-    } on FormatException {
-      await prefs.remove(_usersKey);
-      return _seedAccounts;
+  /// Converts a [UserRole] to its Firestore string representation.
+  String _roleToString(UserRole role) {
+    switch (role) {
+      case UserRole.admin:
+        return 'admin';
+      case UserRole.staff:
+        return 'staff';
+      case UserRole.student:
+        return 'student';
     }
+  }
+
+  /// Builds a [UserModel] from a Firestore document snapshot.
+  UserModel _userFromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final data = doc.data()!;
+    return UserModel(
+      uid: doc.id,
+      username: data['username'] as String? ?? '',
+      password: '',
+      role: _roleFromString(data['role'] as String?),
+      displayName: data['displayName'] as String? ?? '',
+      email: data['email'] as String? ?? '',
+      department: data['department'] as String?,
+      studentId: data['studentId'] as String?,
+      designation: data['designation'] as String?,
+      year: data['year'] as String?,
+      section: data['section'] as String?,
+    );
   }
 
   // ── public API ────────────────────────────────────────────────────────────
 
-  /// Authenticates [username] with [password].
-  Future<AuthResult> login(String username, String password) async {
-    final normalized = username.trim().toLowerCase();
+  /// Returns the currently signed-in Firebase user, or null.
+  User? get firebaseUser => _auth.currentUser;
+
+  /// Signs in with [email] and [password] via Firebase Auth.
+  Future<AuthResult> login(String email, String password) async {
+    var normalizedEmail = email.trim().toLowerCase();
     final normalizedPw = password.trim();
 
-    if (normalized.isEmpty || normalizedPw.isEmpty) {
+    if (normalizedEmail.isEmpty || normalizedPw.isEmpty) {
       return const AuthResult(
         isSuccess: false,
         role: null,
-        message: 'Please enter both username and password.',
+        message: 'Please enter both email and password.',
       );
     }
 
-    final users = await _loadUsers();
-    final user = users.cast<UserModel?>().firstWhere(
-      (u) => u!.username.toLowerCase() == normalized,
-      orElse: () => null,
-    );
+    // Auto-complete username if user omitted domain
+    if (!normalizedEmail.contains('@')) {
+      normalizedEmail = '$normalizedEmail@smartmeet.edu';
+    }
 
-    if (user == null) {
-      return const AuthResult(
+    try {
+      UserCredential credential;
+      try {
+        credential = await _auth.signInWithEmailAndPassword(
+          email: normalizedEmail,
+          password: normalizedPw,
+        );
+      } on FirebaseAuthException {
+        // If user typed @smartmeet.com instead of @smartmeet.edu, seamlessly try @smartmeet.edu
+        if (normalizedEmail.endsWith('@smartmeet.com')) {
+          final eduEmail = normalizedEmail.replaceFirst(
+            '@smartmeet.com',
+            '@smartmeet.edu',
+          );
+          credential = await _auth.signInWithEmailAndPassword(
+            email: eduEmail,
+            password: normalizedPw,
+          );
+        } else {
+          rethrow;
+        }
+      }
+
+      final uid = credential.user?.uid;
+      if (uid == null) {
+        return const AuthResult(
+          isSuccess: false,
+          role: null,
+          message: 'Authentication failed. Please try again.',
+        );
+      }
+
+      final doc = await _db.collection(_usersCollection).doc(uid).get();
+      if (!doc.exists) {
+        await _auth.signOut();
+        return const AuthResult(
+          isSuccess: false,
+          role: null,
+          message: 'Account profile not found. Contact your administrator.',
+        );
+      }
+
+      final userModel = _userFromDoc(doc);
+      return AuthResult(
+        isSuccess: true,
+        role: userModel.role,
+        message: 'Login successful',
+        user: userModel,
+      );
+    } on FirebaseAuthException catch (e) {
+      debugPrint('🔑 Login error: code=${e.code}, message=${e.message}');
+      final msg = switch (e.code) {
+        'user-not-found' =>
+          'No account found with this email. Institutional emails end with @smartmeet.edu.',
+        'wrong-password' ||
+        'invalid-credential' =>
+          'Incorrect email or password. Note: institutional email ends with @smartmeet.edu.',
+        'user-disabled' => 'This account has been disabled.',
+        'too-many-requests' => 'Too many attempts. Please try again later.',
+        'invalid-email' => 'Please enter a valid email address.',
+        _ => 'Login failed: ${e.message ?? e.code}',
+      };
+      return AuthResult(isSuccess: false, role: null, message: msg);
+    } catch (e) {
+      return AuthResult(
         isSuccess: false,
         role: null,
-        message: 'Account not found. Please check your credentials.',
+        message: 'An unexpected error occurred: $e',
       );
     }
-
-    if (user.password != normalizedPw) {
-      return const AuthResult(
-        isSuccess: false,
-        role: null,
-        message: 'Incorrect password. Please try again.',
-      );
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_sessionKey, normalized);
-
-    return AuthResult(
-      isSuccess: true,
-      role: user.role,
-      message: 'Login successful',
-      user: user,
-    );
   }
 
-  /// Returns the [UserRole] of the currently logged-in user, or null.
+  /// Returns the [UserRole] of the currently signed-in user, or null.
   Future<UserRole?> getCurrentRole() async {
     final user = await getCurrentUser();
     return user?.role;
   }
 
-  /// Returns the username string of the current session, or null.
+  /// Returns the email (login ID) of the current Firebase Auth session, or null.
   Future<String?> getCurrentUsername() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_sessionKey);
+    return _auth.currentUser?.email;
   }
 
-  /// Returns the full [UserModel] for the current session, or null.
+  /// Returns the full [UserModel] for the current Firebase session, or null.
   Future<UserModel?> getCurrentUser() async {
-    final username = await getCurrentUsername();
-    if (username == null) return null;
+    final fbUser = _auth.currentUser;
+    if (fbUser == null) return null;
 
-    final users = await _loadUsers();
-    return users.cast<UserModel?>().firstWhere(
-      (u) => u!.username.toLowerCase() == username.toLowerCase(),
-      orElse: () => null,
-    );
+    try {
+      final doc =
+          await _db.collection(_usersCollection).doc(fbUser.uid).get();
+      if (!doc.exists) return null;
+      return _userFromDoc(doc);
+    } catch (_) {
+      return null;
+    }
   }
 
-  /// Returns all faculty accounts in the system.
+  /// Returns all faculty accounts stored in Firestore.
   Future<List<UserModel>> getAllFaculty() async {
-    final users = await _loadUsers();
-    return users.where((u) => u.role == UserRole.staff).toList();
+    final snap = await _db
+        .collection(_usersCollection)
+        .where('role', isEqualTo: 'staff')
+        .get();
+    return snap.docs.map(_userFromDoc).toList();
   }
 
-  /// Returns all student accounts in the system.
+  /// Returns all student accounts stored in Firestore.
   Future<List<UserModel>> getAllStudents() async {
-    final users = await _loadUsers();
-    return users.where((u) => u.role == UserRole.student).toList();
+    final snap = await _db
+        .collection(_usersCollection)
+        .where('role', isEqualTo: 'student')
+        .get();
+    return snap.docs.map(_userFromDoc).toList();
   }
 
-  /// Returns staff and student accounts to the signed-in administrator.
+  /// Returns staff and student accounts (admin-only).
   Future<List<UserModel>> getManagedAccounts() async {
     if (await getCurrentRole() != UserRole.admin) {
       throw StateError('Only administrators can view managed accounts.');
     }
-    final users = await _loadUsers();
-    return users.where((user) => user.role != UserRole.admin).toList();
+    final snap = await _db
+        .collection(_usersCollection)
+        .where('role', whereIn: ['staff', 'student'])
+        .get();
+    return snap.docs.map(_userFromDoc).toList();
   }
 
-  /// Creates a staff or student account for the signed-in administrator.
+  /// Creates a staff or student Firebase Auth account + Firestore profile.
+  ///
+  /// [adminPassword] is required so the service can sign the admin back in
+  /// after creating the new user (Firebase Auth replaces the current session
+  /// when `createUserWithEmailAndPassword` is called).
   Future<AuthResult> createManagedAccount({
     required String username,
     required String password,
@@ -249,10 +243,12 @@ class AuthService {
     required String displayName,
     required String email,
     required String department,
+    required String adminPassword,
     String? studentId,
     String? designation,
   }) async {
-    if (await getCurrentRole() != UserRole.admin) {
+    final currentRole = await getCurrentRole();
+    if (currentRole != UserRole.admin) {
       return const AuthResult(
         isSuccess: false,
         role: null,
@@ -270,15 +266,18 @@ class AuthService {
     final normalizedUsername = username.trim().toLowerCase();
     final normalizedEmail = email.trim().toLowerCase();
     final normalizedName = displayName.trim();
-    final normalizedDepartment = department.trim();
-    final normalizedPassword = password.trim();
+    final normalizedDept = department.trim();
+    final normalizedPw = password.trim();
+
     if (normalizedUsername.length < 3 ||
-        normalizedPassword.length < 6 ||
+        normalizedPw.length < 6 ||
         normalizedName.isEmpty ||
         !normalizedEmail.contains('@') ||
-        normalizedDepartment.isEmpty ||
-        (role == UserRole.student && (studentId?.trim().isNotEmpty != true)) ||
-        (role == UserRole.staff && (designation?.trim().isNotEmpty != true))) {
+        normalizedDept.isEmpty ||
+        (role == UserRole.student &&
+            (studentId?.trim().isNotEmpty != true)) ||
+        (role == UserRole.staff &&
+            (designation?.trim().isNotEmpty != true))) {
       return const AuthResult(
         isSuccess: false,
         role: null,
@@ -286,74 +285,197 @@ class AuthService {
       );
     }
 
-    final users = await _loadUsers();
-    if (users.any(
-      (user) =>
-          user.username.toLowerCase() == normalizedUsername ||
-          user.email.toLowerCase() == normalizedEmail,
-    )) {
+    // Check for duplicate username in Firestore
+    final usernameCheck = await _db
+        .collection(_usersCollection)
+        .where('username', isEqualTo: normalizedUsername)
+        .limit(1)
+        .get();
+
+    if (usernameCheck.docs.isNotEmpty) {
       return const AuthResult(
         isSuccess: false,
         role: null,
-        message: 'That username or email is already in use.',
+        message: 'That username is already in use.',
       );
     }
 
-    final account = UserModel(
-      username: normalizedUsername,
-      password: normalizedPassword,
-      role: role,
-      displayName: normalizedName,
-      email: normalizedEmail,
-      department: normalizedDepartment,
-      studentId: role == UserRole.student ? studentId?.trim() : null,
-      designation: role == UserRole.staff ? designation?.trim() : null,
-    );
-    users.add(account);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _usersKey,
-      jsonEncode(users.map((user) => user.toJson()).toList()),
-    );
+    // Save admin identity before we lose the session
+    final adminEmail = _auth.currentUser!.email!;
 
-    return AuthResult(
-      isSuccess: true,
-      role: role,
-      message: 'Account created successfully.',
-      user: account,
-    );
+    try {
+      // Create the new Firebase Auth user — this signs us out as admin
+      final newCredential = await _auth.createUserWithEmailAndPassword(
+        email: normalizedEmail,
+        password: normalizedPw,
+      );
+
+      final newUid = newCredential.user!.uid;
+
+      // Update Firebase Auth display name for the new user
+      await newCredential.user!.updateDisplayName(normalizedName);
+
+      // Write profile to Firestore
+      await _db.collection(_usersCollection).doc(newUid).set({
+        'uid': newUid,
+        'username': normalizedUsername,
+        'role': _roleToString(role),
+        'displayName': normalizedName,
+        'email': normalizedEmail,
+        'department': normalizedDept,
+        if (role == UserRole.student) 'studentId': studentId?.trim(),
+        if (role == UserRole.staff) 'designation': designation?.trim(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+
+      // Sign admin back in to restore session
+      await _auth.signInWithEmailAndPassword(
+        email: adminEmail,
+        password: adminPassword,
+      );
+
+      final account = UserModel(
+        uid: newUid,
+        username: normalizedUsername,
+        password: '',
+        role: role,
+        displayName: normalizedName,
+        email: normalizedEmail,
+        department: normalizedDept,
+        studentId: role == UserRole.student ? studentId?.trim() : null,
+        designation: role == UserRole.staff ? designation?.trim() : null,
+      );
+
+      return AuthResult(
+        isSuccess: true,
+        role: role,
+        message: 'Account created successfully.',
+        user: account,
+      );
+    } on FirebaseAuthException catch (e) {
+      // If we failed mid-way, try to restore admin session
+      try {
+        await _auth.signInWithEmailAndPassword(
+          email: adminEmail,
+          password: adminPassword,
+        );
+      } catch (_) {}
+
+      final msg = switch (e.code) {
+        'email-already-in-use' => 'That email address is already in use.',
+        'weak-password' => 'Password must be at least 6 characters.',
+        'invalid-email' => 'Please enter a valid email address.',
+        'wrong-password' ||
+        'invalid-credential' =>
+          'Admin password incorrect. Session could not be restored.',
+        _ => 'Could not create account: ${e.message ?? e.code}',
+      };
+      return AuthResult(isSuccess: false, role: null, message: msg);
+    } catch (e) {
+      // If we failed mid-way, try to restore admin session
+      try {
+        await _auth.signInWithEmailAndPassword(
+          email: adminEmail,
+          password: adminPassword,
+        );
+      } catch (_) {}
+
+      return AuthResult(
+        isSuccess: false,
+        role: null,
+        message: 'Could not create account: $e',
+      );
+    }
   }
 
-  /// Updates a user's profile fields (name, department, designation, etc.)
-  /// and persists the changes. Does not allow changing username or role.
-  Future<void> updateUserProfile(String username, Map<String, String> updates) async {
-    await _ensureUsersSeeded();
-    final prefs = await SharedPreferences.getInstance();
-    final users = await _loadUsers();
-    final index = users.indexWhere(
-      (u) => u.username.toLowerCase() == username.toLowerCase(),
-    );
-    if (index == -1) return;
+  /// Updates a user's profile fields in Firestore.
+  Future<void> updateUserProfile(
+    String uid,
+    Map<String, String> updates,
+  ) async {
+    final updateData = <String, dynamic>{};
+    if (updates.containsKey('name')) {
+      updateData['displayName'] = updates['name'];
+    }
+    if (updates.containsKey('displayName')) {
+      updateData['displayName'] = updates['displayName'];
+    }
+    if (updates.containsKey('department')) {
+      updateData['department'] = updates['department'];
+    }
+    if (updates.containsKey('studentId')) {
+      updateData['studentId'] = updates['studentId'];
+    }
+    if (updates.containsKey('designation')) {
+      updateData['designation'] = updates['designation'];
+    }
+    if (updates.containsKey('year')) {
+      updateData['year'] = updates['year'];
+    }
+    if (updates.containsKey('section')) {
+      updateData['section'] = updates['section'];
+    }
+    if (updateData.isEmpty) return;
 
-    final old = users[index];
-    users[index] = UserModel(
-      username: old.username,
-      password: old.password,
-      role: old.role,
-      displayName: updates['name'] ?? old.displayName,
-      email: old.email, // email (login id) is immutable
-      department: updates['department'] ?? old.department,
-      studentId: updates['studentId'] ?? old.studentId,
-      designation: updates['designation'] ?? old.designation,
+    updateData['updatedAt'] = FieldValue.serverTimestamp();
+
+    await _db.collection(_usersCollection).doc(uid).set(
+      updateData,
+      SetOptions(merge: true),
     );
 
-    final encoded = jsonEncode(users.map((u) => u.toJson()).toList());
-    await prefs.setString(_usersKey, encoded);
+    // Also update Firebase Auth displayName if currentUser is the user being updated
+    final newName = updateData['displayName'] as String?;
+    if (newName != null && newName.isNotEmpty && _auth.currentUser?.uid == uid) {
+      try {
+        await _auth.currentUser!.updateDisplayName(newName);
+      } catch (_) {}
+    }
+
+    // Sync studentName across all meetings created by this student
+    if (newName != null && newName.isNotEmpty) {
+      try {
+        final meetingsSnap = await _db
+            .collection('meetings')
+            .where('studentUid', isEqualTo: uid)
+            .get();
+        if (meetingsSnap.docs.isNotEmpty) {
+          final batch = _db.batch();
+          for (final doc in meetingsSnap.docs) {
+            batch.update(doc.reference, {'studentName': newName});
+          }
+          await batch.commit();
+        }
+      } catch (_) {}
+    }
   }
 
-  /// Clears the current session.
+  /// Sends a password-reset email via Firebase Auth.
+  ///
+  /// Returns a user-friendly message. For security the message is kept
+  /// intentionally vague so callers cannot enumerate valid emails.
+  Future<String> sendPasswordResetEmail(String email) async {
+    final normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail.isEmpty || !normalizedEmail.contains('@')) {
+      return 'Please enter a valid email address.';
+    }
+    try {
+      await _auth.sendPasswordResetEmail(email: normalizedEmail);
+      return 'If an account exists for $normalizedEmail, a password reset link has been sent.';
+    } on FirebaseAuthException catch (e) {
+      return switch (e.code) {
+        'invalid-email' => 'Please enter a valid email address.',
+        'too-many-requests' => 'Too many attempts. Please try again later.',
+        _ =>
+          'If an account exists for $normalizedEmail, a password reset link has been sent.',
+      };
+    } catch (_) {
+      return 'Something went wrong. Please try again.';
+    }
+  }
+
+  /// Signs out of Firebase Auth.
   Future<void> logout() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_sessionKey);
+    await _auth.signOut();
   }
 }

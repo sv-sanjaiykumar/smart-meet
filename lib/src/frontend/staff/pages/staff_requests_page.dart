@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../student/models/meeting.dart';
+import '../theme/staff_theme.dart';
 
 class StaffRequestsPage extends StatefulWidget {
   const StaffRequestsPage({
@@ -9,12 +10,14 @@ class StaffRequestsPage extends StatefulWidget {
     required this.meetings,
     required this.onRefresh,
     required this.onStatusChanged,
+    this.onEditMeeting,
   });
 
   final List<Meeting> meetings;
   final Future<void> Function() onRefresh;
   final Future<void> Function(Meeting meeting, MeetingStatus status)
   onStatusChanged;
+  final Future<void> Function(Meeting meeting)? onEditMeeting;
 
   @override
   State<StaffRequestsPage> createState() => _StaffRequestsPageState();
@@ -22,8 +25,8 @@ class StaffRequestsPage extends StatefulWidget {
 
 class _StaffRequestsPageState extends State<StaffRequestsPage>
     with SingleTickerProviderStateMixin {
-  static const _ink = Color(0xFF171717);
-  static const _muted = Color(0xFF777777);
+  static const _ink = StaffColors.ink;
+  static const _muted = StaffColors.mutedInk;
   static const _pink = Color(0xFFF8DDFB);
 
   late final TabController _tabController;
@@ -360,6 +363,45 @@ class _StaffRequestsPageState extends State<StaffRequestsPage>
                       icon: const Icon(Icons.close, size: 20, color: _muted),
                     ),
                   ],
+                ),
+              ],
+              if (meeting.status == MeetingStatus.accepted &&
+                  widget.onEditMeeting != null) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => widget.onEditMeeting!(meeting),
+                    icon: const Icon(
+                      Icons.edit_calendar_outlined,
+                      size: 16,
+                      color: StaffColors.primary,
+                    ),
+                    label: Text(
+                      (meeting.time == null || meeting.location == null)
+                          ? 'Set Time & Place'
+                          : 'Edit Time & Place (${meeting.time ?? ''}${meeting.location != null ? ' • ${meeting.location}' : ''})',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: StaffColors.primary,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(
+                        color: StaffColors.primary.withValues(alpha: 0.35),
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 10,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ],

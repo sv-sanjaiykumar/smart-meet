@@ -1,41 +1,67 @@
-import '../../../backend/local_storage_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../../../backend/meeting_service.dart';
 import '../models/meeting.dart';
 
-/// Thin façade over [LocalStorageService] used by student-side pages.
-///
-/// For new meeting submissions that need notifications, prefer using
-/// [MeetingService] (from the backend) directly.
+/// Student-side service backed by Firestore via [MeetingService].
+/// Also cleans up any legacy local storage data so only database data is shown.
 class StorageService {
-  final LocalStorageService _local = LocalStorageService();
+  StorageService({MeetingService? meetingService})
+      : _meetingService = meetingService ?? MeetingService() {
+    _cleanLegacyLocalStorage();
+  }
 
-  Future<void> saveMeetings(List<Meeting> meetings) =>
-      _local.saveMeetings(meetings);
+  final MeetingService _meetingService;
 
-  Future<List<Meeting>> getMeetings() => _local.getMeetings();
+  static void _cleanLegacyLocalStorage() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (prefs.containsKey('smart_meet_meetings')) {
+        await prefs.remove('smart_meet_meetings');
+      }
+    } catch (_) {}
+  }
+
+  Future<List<Meeting>> getMeetings() => _meetingService.getMeetings();
+
+  Future<List<Meeting>> getMeetingsForCurrentStudent() =>
+      _meetingService.getMeetingsForCurrentStudent();
+
+  Stream<List<Meeting>> streamMeetingsForCurrentStudent() =>
+      _meetingService.streamMeetingsForCurrentStudent();
 
   Future<Meeting?> getMeetingById(String id) =>
-      _local.getMeetingById(id);
+      _meetingService.getMeetingById(id);
 
   Future<void> addMeeting(Meeting meeting) =>
-      _local.addMeeting(meeting);
+      _meetingService.saveMeeting(meeting);
+
+  Future<void> saveMeetings(List<Meeting> meetings) async {
+    for (final m in meetings) {
+      await _meetingService.saveMeeting(m);
+    }
+  }
 
   Future<void> updateMeetingStatus(
     String meetingId,
     MeetingStatus status, [
     String? reason,
   ]) =>
-      _local.updateMeetingStatus(meetingId, status, reason);
+      _meetingService.updateMeetingStatus(meetingId, status, reason);
 
   Future<void> updateMeetingDetails(
     String meetingId, {
     String? time,
     String? location,
   }) =>
-      _local.updateMeetingDetails(meetingId, time: time, location: location);
+      _meetingService.editMeetingDetails(meetingId, time: time, location: location);
 
   Future<void> deleteMeeting(String meetingId) =>
-      _local.deleteMeeting(meetingId);
+      _meetingService.deleteMeeting(meetingId);
 
   Future<List<Meeting>> getMeetingsByStatus(MeetingStatus status) =>
-      _local.getMeetingsByStatus(status);
+      _meetingService.getMeetingsByStatus(status);
+
+  Future<void> togglePin(String meetingId, bool isPinned) =>
+      _meetingService.togglePin(meetingId, isPinned);
 }

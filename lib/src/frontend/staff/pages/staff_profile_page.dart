@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../backend/auth_service.dart';
 import '../../login/login_page.dart';
+import '../theme/staff_theme.dart';
 
 class StaffProfilePage extends StatefulWidget {
   const StaffProfilePage({super.key, required this.onBack});
@@ -16,9 +17,9 @@ class StaffProfilePage extends StatefulWidget {
 }
 
 class _StaffProfilePageState extends State<StaffProfilePage> {
-  static const _ink = Color(0xFF171717);
+  static const _ink = StaffColors.ink;
   static const _muted = Color(0xFF888888);
-  static const _accent = Color(0xFFBFC4FF);
+  static const _accent = StaffColors.primary;
 
   String? _username;
   Map<String, String> _details = {};

@@ -13,19 +13,19 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  final _usernameController = TextEditingController();
+  final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
   bool _obscurePassword = true;
 
   Future<void> _handleLogin() async {
-    final username = _usernameController.text;
+    final email = _emailController.text;
     final password = _passwordController.text;
 
     setState(() => _isLoading = true);
 
-    final result = await _authService.login(username, password);
+    final result = await _authService.login(email, password);
 
     if (!mounted) return;
 
@@ -54,6 +54,151 @@ class _LoginPageState extends State<LoginPage> {
             ? const AdminHomePage()
             : const StaffHomePage(),
       ),
+    );
+  }
+
+  void _showForgotPasswordSheet() {
+    final resetEmailController = TextEditingController(
+      text: _emailController.text,
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        bool isSending = false;
+
+        return StatefulBuilder(
+          builder: (context, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(context).viewInsets.bottom,
+              ),
+              child: Container(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 28),
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Center(
+                      child: Container(
+                        width: 40,
+                        height: 4,
+                        margin: const EdgeInsets.only(bottom: 20),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFDDE3ED),
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    ),
+                    const Text(
+                      'Reset password',
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFF1C2540),
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Enter your email and we\'ll send you a link to reset your password.',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: Color(0xFF718096),
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: resetEmailController,
+                      keyboardType: TextInputType.emailAddress,
+                      autofocus: resetEmailController.text.isEmpty,
+                      decoration: InputDecoration(
+                        hintText: 'Email address',
+                        prefixIcon: const Icon(
+                          Icons.email_outlined,
+                          color: Color(0xFF9AA7B8),
+                        ),
+                        filled: true,
+                        fillColor: const Color(0xFFEAF2FB),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 18,
+                          horizontal: 16,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          borderSide: const BorderSide(
+                            color: Color(0xFF0E6BFF),
+                            width: 1.5,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    SizedBox(
+                      width: double.infinity,
+                      height: 52,
+                      child: ElevatedButton(
+                        onPressed: isSending
+                            ? null
+                            : () async {
+                                setSheetState(() => isSending = true);
+                                final message = await _authService
+                                    .sendPasswordResetEmail(
+                                      resetEmailController.text,
+                                    );
+                                if (!mounted) return;
+                                Navigator.of(sheetContext).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(message),
+                                    backgroundColor:
+                                        const Color(0xFF167C56),
+                                  ),
+                                );
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: const Color(0xFF0E6BFF),
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          elevation: 0,
+                        ),
+                        child: isSending
+                            ? const SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text(
+                                'Send reset link',
+                                style: TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 
@@ -121,9 +266,9 @@ class _LoginPageState extends State<LoginPage> {
                         ),
                         const SizedBox(height: 28),
                         _buildTextField(
-                          controller: _usernameController,
-                          hintText: 'Email or Roll Number',
-                          prefixIcon: Icons.person_outline,
+                          controller: _emailController,
+                          hintText: 'Email address',
+                          prefixIcon: Icons.email_outlined,
                           keyboardType: TextInputType.emailAddress,
                         ),
                         const SizedBox(height: 18),
@@ -144,7 +289,7 @@ class _LoginPageState extends State<LoginPage> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: TextButton(
-                            onPressed: () {},
+                            onPressed: _showForgotPasswordSheet,
                             style: TextButton.styleFrom(
                               padding: EdgeInsets.zero,
                               minimumSize: const Size(0, 0),
