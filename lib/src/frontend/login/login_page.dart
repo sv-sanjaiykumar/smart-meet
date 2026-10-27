@@ -117,6 +117,9 @@ class _LoginPageState extends State<LoginPage> {
                     TextField(
                       controller: resetEmailController,
                       keyboardType: TextInputType.emailAddress,
+                      autocorrect: false,
+                      enableSuggestions: false,
+                      textCapitalization: TextCapitalization.none,
                       autofocus: resetEmailController.text.isEmpty,
                       decoration: InputDecoration(
                         hintText: 'Email address',
@@ -270,6 +273,9 @@ class _LoginPageState extends State<LoginPage> {
                           hintText: 'Email address',
                           prefixIcon: Icons.email_outlined,
                           keyboardType: TextInputType.emailAddress,
+                          autocorrect: false,
+                          enableSuggestions: false,
+                          textCapitalization: TextCapitalization.none,
                         ),
                         const SizedBox(height: 18),
                         _buildTextField(
@@ -277,6 +283,8 @@ class _LoginPageState extends State<LoginPage> {
                           hintText: 'Password',
                           prefixIcon: Icons.lock_outline,
                           obscureText: _obscurePassword,
+                          autocorrect: false,
+                          enableSuggestions: false,
                           suffixIcon: IconButton(
                             onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                             icon: Icon(
@@ -354,11 +362,17 @@ class _LoginPageState extends State<LoginPage> {
     TextInputType keyboardType = TextInputType.text,
     bool obscureText = false,
     Widget? suffixIcon,
+    bool autocorrect = true,
+    bool enableSuggestions = true,
+    TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
     return TextField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
+      autocorrect: autocorrect,
+      enableSuggestions: enableSuggestions,
+      textCapitalization: textCapitalization,
       decoration: InputDecoration(
         hintText: hintText,
         prefixIcon: Icon(prefixIcon, color: const Color(0xFF9AA7B8)),

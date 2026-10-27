@@ -481,11 +481,18 @@ class _AdminHomePageState extends State<AdminHomePage> {
     IconData icon, {
     TextInputType keyboardType = TextInputType.text,
     bool obscureText = false,
+    bool? autocorrect,
+    bool? enableSuggestions,
+    TextCapitalization textCapitalization = TextCapitalization.none,
   }) {
+    final isEmail = keyboardType == TextInputType.emailAddress;
     return TextFormField(
       controller: controller,
       keyboardType: keyboardType,
       obscureText: obscureText,
+      autocorrect: autocorrect ?? (!obscureText && !isEmail),
+      enableSuggestions: enableSuggestions ?? (!obscureText && !isEmail),
+      textCapitalization: textCapitalization,
       decoration: _inputDecoration(label, icon),
       validator: (value) {
         if (value == null || value.trim().isEmpty) return 'Required';

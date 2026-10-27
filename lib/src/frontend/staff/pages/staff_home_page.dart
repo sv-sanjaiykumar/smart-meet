@@ -46,9 +46,12 @@ class _StaffHomePageState extends State<StaffHomePage> {
   void _subscribeToMeetings() async {
     final user = await _authService.getCurrentUser();
     final uid = user?.uid;
+    final staffName = (user != null && user.displayName.trim().isNotEmpty)
+        ? user.displayName.trim()
+        : user?.username;
     _meetingSubscription?.cancel();
     _meetingSubscription = _meetingService
-        .streamMeetingsForStaff(user?.displayName, uid)
+        .streamMeetingsForStaff(staffName, uid)
         .listen((meetings) {
       if (mounted) {
         setState(() {
@@ -60,7 +63,12 @@ class _StaffHomePageState extends State<StaffHomePage> {
   }
 
   Future<void> _loadMeetings() async {
-    final meetings = await _meetingService.getMeetings();
+    final user = await _authService.getCurrentUser();
+    final uid = user?.uid;
+    final staffName = (user != null && user.displayName.trim().isNotEmpty)
+        ? user.displayName.trim()
+        : user?.username;
+    final meetings = await _meetingService.getMeetingsForStaff(staffName, uid);
     if (!mounted) return;
     setState(() {
       _meetings = meetings;
@@ -475,7 +483,12 @@ class _StaffHomePageState extends State<StaffHomePage> {
           onEditMeeting: (meeting) => _showScheduleMeetingSheet(meeting),
         );
       case 2:
-        return StaffHistoryPage(meetings: _meetings, onRefresh: _loadMeetings);
+        return StaffHistoryPage(
+          meetings: _meetings,
+          onRefresh: _loadMeetings,
+          onStatusChanged: _updateMeetingStatus,
+          onEditMeeting: (meeting) => _showScheduleMeetingSheet(meeting),
+        );
       case 3:
         return StaffNotificationsPage(
           meetings: _meetings,
