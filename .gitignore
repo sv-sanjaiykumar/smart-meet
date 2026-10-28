@@ -99,3 +99,6 @@ app.*.map.json
 scripts/serviceAccountKey.json
 scripts/*firebase-adminsdk*.json
 .env
+scripts/serviceAccountKey.json
+scripts/*firebase-adminsdk*.json
+node_modules/
