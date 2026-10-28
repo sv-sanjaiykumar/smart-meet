@@ -96,3 +96,6 @@ app.*.map.json
 /assets/*
 !/assets/fonts/
 !/assets/meeting facutly assest-01.png
+scripts/serviceAccountKey.json
+scripts/*firebase-adminsdk*.json
+.env
