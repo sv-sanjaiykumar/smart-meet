@@ -1,8 +1,10 @@
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 
 import 'firebase_options.dart';
 import 'src/backend/auth_service.dart';
+import 'src/backend/push_notification_service.dart';
 import 'src/frontend/admin/admin_home_page.dart';
 import 'src/frontend/login/login_page.dart';
 import 'src/frontend/staff/pages/staff_home_page.dart';
@@ -14,7 +16,11 @@ void main() async {
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
+  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
   runApp(const MyApp());
+
+  // Initialize push notification listeners asynchronously so runApp is never blocked.
+  PushNotificationService().initialize();
 }
 
 class MyApp extends StatefulWidget {
@@ -35,13 +41,38 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _loadSession() async {
-    final authService = AuthService();
-    final role = await authService.getCurrentRole();
-    if (mounted) {
-      setState(() {
-        _role = role;
-        _isLoading = false;
-      });
+    try {
+      final authService = AuthService();
+      final role = await authService.getCurrentRole();
+      final user = await authService.getCurrentUser();
+
+      if (user != null) {
+        // Register device token in the background
+        PushNotificationService().registerUserDevice(
+          user.uid,
+          role: user.role,
+          username: user.username,
+        );
+      } else if (authService.firebaseUser != null) {
+        // If an orphaned Firebase Auth session exists without a Firestore profile,
+        // sign out cleanly so the login page can be presented.
+        await authService.logout();
+      }
+
+      if (mounted) {
+        setState(() {
+          _role = user?.role ?? role;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('⚠️ Error loading session: $e');
+      if (mounted) {
+        setState(() {
+          _role = null;
+          _isLoading = false;
+        });
+      }
     }
   }
 

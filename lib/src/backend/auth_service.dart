@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 
 import 'models/user_model.dart';
+import 'push_notification_service.dart';
 
 export 'models/user_model.dart' show UserModel;
 
@@ -33,8 +34,15 @@ class AuthResult {
 class AuthService {
   static const String _usersCollection = 'users';
 
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+  AuthService({FirebaseAuth? auth, FirebaseFirestore? db})
+      : _injectedAuth = auth,
+        _injectedDb = db;
+
+  final FirebaseAuth? _injectedAuth;
+  final FirebaseFirestore? _injectedDb;
+
+  FirebaseAuth get _auth => _injectedAuth ?? FirebaseAuth.instance;
+  FirebaseFirestore get _db => _injectedDb ?? FirebaseFirestore.instance;
 
   // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -77,6 +85,7 @@ class AuthService {
       designation: data['designation'] as String?,
       year: data['year'] as String?,
       section: data['section'] as String?,
+      fcmToken: data['fcmToken'] as String?,
     );
   }
 
@@ -146,6 +155,18 @@ class AuthService {
       }
 
       final userModel = _userFromDoc(doc);
+
+      // Register device for push notifications
+      try {
+        await PushNotificationService().registerUserDevice(
+          userModel.uid,
+          role: userModel.role,
+          username: userModel.username,
+        );
+      } catch (e) {
+        debugPrint('⚠️ [FCM] Login device registration error: $e');
+      }
+
       return AuthResult(
         isSuccess: true,
         role: userModel.role,
@@ -476,6 +497,14 @@ class AuthService {
 
   /// Signs out of Firebase Auth.
   Future<void> logout() async {
+    final uid = _auth.currentUser?.uid;
+    if (uid != null) {
+      try {
+        await PushNotificationService().unregisterUserDevice(uid);
+      } catch (e) {
+        debugPrint('⚠️ [FCM] Device unregister error on logout: $e');
+      }
+    }
     await _auth.signOut();
   }
 }

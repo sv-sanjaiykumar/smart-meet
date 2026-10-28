@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import '../frontend/student/models/meeting.dart';
 import 'auth_service.dart';
 import 'notification_service.dart';
+import 'push_notification_service.dart';
 
 /// Orchestrates the full meeting lifecycle backed by Firebase Firestore:
 /// submit → accept / reject / complete → notifications.
@@ -18,15 +19,18 @@ class MeetingService {
     FirebaseAuth? auth,
     NotificationService? notifications,
     AuthService? authService,
+    PushNotificationService? pushNotifications,
   })  : _injectedDb = db,
         _injectedAuth = auth,
         _notifications = notifications ?? NotificationService(),
-        _authService = authService ?? AuthService();
+        _authService = authService ?? AuthService(),
+        _pushNotifications = pushNotifications ?? PushNotificationService();
 
   final FirebaseFirestore? _injectedDb;
   final FirebaseAuth? _injectedAuth;
   final NotificationService _notifications;
   final AuthService _authService;
+  final PushNotificationService _pushNotifications;
 
   FirebaseFirestore? get _db {
     if (_injectedDb != null) return _injectedDb;
@@ -307,6 +311,16 @@ class MeetingService {
       debugPrint('⚠️ Notification error: $e');
     }
 
+    // Fire FCM push notification to staff
+    try {
+      await _pushNotifications.sendMeetingBookedPushNotification(
+        meeting: newMeeting,
+        studentName: studentName,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Push notification error on submit: $e');
+    }
+
     return newMeeting;
   }
 
@@ -361,14 +375,27 @@ class MeetingService {
     if (meeting == null) return;
 
     final staffUser = await _authService.getCurrentUser();
+    final staffDisplayName = staffUser?.displayName ?? 'Faculty';
     try {
       await _notifications.onMeetingAccepted(
         studentUsername: studentUsername ?? _usernameFromMeeting(meeting),
-        staffDisplayName: staffUser?.displayName ?? 'Faculty',
+        staffDisplayName: staffDisplayName,
         meeting: meeting,
       );
     } catch (e) {
       debugPrint('⚠️ Notification error: $e');
+    }
+
+    // Fire FCM push notification to student
+    try {
+      await _pushNotifications.sendMeetingAcceptedPushNotification(
+        meeting: meeting,
+        staffName: staffDisplayName,
+        time: time,
+        location: location,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Push notification error on accept: $e');
     }
   }
 
@@ -391,14 +418,26 @@ class MeetingService {
     if (meeting == null) return;
 
     final staffUser = await _authService.getCurrentUser();
+    final staffDisplayName = staffUser?.displayName ?? 'Faculty';
     try {
       await _notifications.onMeetingRejected(
         studentUsername: studentUsername ?? _usernameFromMeeting(meeting),
-        staffDisplayName: staffUser?.displayName ?? 'Faculty',
+        staffDisplayName: staffDisplayName,
         meeting: meeting,
       );
     } catch (e) {
       debugPrint('⚠️ Notification error: $e');
+    }
+
+    // Fire FCM push notification to student
+    try {
+      await _pushNotifications.sendMeetingRejectedPushNotification(
+        meeting: meeting,
+        staffName: staffDisplayName,
+        reason: reason,
+      );
+    } catch (e) {
+      debugPrint('⚠️ Push notification error on reject: $e');
     }
   }
 

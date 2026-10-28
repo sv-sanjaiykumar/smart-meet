@@ -15,6 +15,7 @@ class UserModel {
   final String? designation;
   final String? year;
   final String? section;
+  final String? fcmToken;
 
   const UserModel({
     required this.uid,
@@ -28,6 +29,7 @@ class UserModel {
     this.designation,
     this.year,
     this.section,
+    this.fcmToken,
   });
 
   Map<String, dynamic> toJson() => {
@@ -41,6 +43,7 @@ class UserModel {
     'designation': designation,
     'year': year,
     'section': section,
+    if (fcmToken != null) 'fcmToken': fcmToken,
   };
 
   factory UserModel.fromJson(Map<String, dynamic> json) => UserModel(
@@ -55,6 +58,34 @@ class UserModel {
     designation: json['designation'] as String?,
     year: json['year'] as String?,
     section: json['section'] as String?,
+    fcmToken: json['fcmToken'] as String?,
+  );
+
+  UserModel copyWith({
+    String? uid,
+    String? username,
+    String? password,
+    UserRole? role,
+    String? displayName,
+    String? email,
+    String? department,
+    String? studentId,
+    String? designation,
+    String? year,
+    String? section,
+    String? fcmToken,
+  }) => UserModel(
+    uid: uid ?? this.uid,
+    username: username ?? this.username,
+    password: password ?? this.password,
+    role: role ?? this.role,
+    displayName: displayName ?? this.displayName,
+    email: email ?? this.email,
+    department: department ?? this.department,
+    studentId: studentId ?? this.studentId,
+    designation: designation ?? this.designation,
+    year: year ?? this.year,
+    section: section ?? this.section,
+    fcmToken: fcmToken ?? this.fcmToken,
   );
 }
-
