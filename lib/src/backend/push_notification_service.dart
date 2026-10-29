@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -91,8 +92,12 @@ class PushNotificationService {
   bool _isInitialized = false;
   String? _currentToken;
   String? _currentUserId;
+  UserRole? _currentRole;
+  String? _currentUsername;
 
   String? get currentToken => _currentToken;
+  String? get currentUserId => _currentUserId;
+  String? get currentUsername => _currentUsername;
 
   // ── Initialization ────────────────────────────────────────────────────────
 
@@ -116,6 +121,15 @@ class PushNotificationService {
         debugPrint(
           '🔔 [FCM] Notification authorization status: ${settings.authorizationStatus}',
         );
+        if (settings.authorizationStatus == AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional) {
+          try {
+            final authUser = FirebaseAuth.instance.currentUser;
+            if (authUser != null) {
+              registerUserDevice(authUser.uid);
+            }
+          } catch (_) {}
+        }
       } catch (e) {
         debugPrint('⚠️ [FCM] requestPermission error: $e');
       }
@@ -219,6 +233,10 @@ class PushNotificationService {
         _currentToken = newToken;
         if (_currentUserId != null) {
           _persistTokenToFirestore(_currentUserId!, newToken);
+          _messaging.subscribeToTopic('user_$_currentUserId');
+          if (_currentRole != null) {
+            _messaging.subscribeToTopic('role_${_currentRole!.name}');
+          }
         }
       });
 
@@ -232,6 +250,28 @@ class PushNotificationService {
   // ── Foreground Notification Display ────────────────────────────────────────
 
   void _handleForegroundMessage(RemoteMessage message) {
+    // If the message specifies a recipientUid, only display if current user is that recipient
+    final recipientUid = message.data['recipientUid'];
+    if (recipientUid != null &&
+        recipientUid.toString().isNotEmpty &&
+        _currentUserId != null &&
+        _currentUserId != recipientUid) {
+      debugPrint(
+        '🛑 [FCM Foreground] Dropping push notification meant for $recipientUid (current user is $_currentUserId)',
+      );
+      return;
+    }
+
+    // Never display on sender device
+    final senderUid = message.data['senderUid'];
+    if (senderUid != null &&
+        senderUid.toString().isNotEmpty &&
+        _currentUserId != null &&
+        _currentUserId == senderUid) {
+      debugPrint('🛑 [FCM Foreground] Dropping self-sent push notification');
+      return;
+    }
+
     final notification = message.notification;
     final title = notification?.title ?? message.data['title'] ?? 'Smart Meet';
     final body = notification?.body ?? message.data['body'] ?? '';
@@ -312,55 +352,70 @@ class PushNotificationService {
     String? username,
   }) async {
     _currentUserId = uid;
+    _currentRole = role;
+    _currentUsername = username;
+
     try {
       String? token;
-      try {
-        token = await _messaging.getToken().timeout(
-          const Duration(seconds: 4),
-          onTimeout: () => null,
-        );
-      } catch (e) {
-        debugPrint(
-          'ℹ️ [FCM] Device token not available yet (normal on iOS Simulator): $e',
-        );
+
+      // On iOS devices, the APNs token must be established before requesting an FCM token.
+      if (defaultTargetPlatform == TargetPlatform.iOS) {
+        for (int i = 0; i < 10; i++) {
+          try {
+            final apns = await _messaging.getAPNSToken();
+            if (apns != null) {
+              debugPrint('✅ [FCM] iOS APNs token ready: $apns');
+              break;
+            }
+          } catch (_) {}
+          await Future.delayed(const Duration(milliseconds: 1000));
+        }
+      }
+
+      // Retry up to 3 times to allow handshake to complete.
+      for (int i = 1; i <= 3; i++) {
+        try {
+          token = await _messaging.getToken().timeout(
+            const Duration(seconds: 5),
+            onTimeout: () => null,
+          );
+          if (token != null && token.isNotEmpty) break;
+        } catch (e) {
+          debugPrint('ℹ️ [FCM] Attempt $i getting device token: $e');
+        }
+        if (i < 3) {
+          await Future.delayed(const Duration(seconds: 1));
+        }
       }
 
       if (token != null && token.isNotEmpty) {
         _currentToken = token;
         await _persistTokenToFirestore(uid, token);
 
-        // Subscribe to user personal topic
+        // Subscribe strictly to user personal UID topic (no shared name topics)
         try {
           await _messaging.subscribeToTopic('user_$uid').timeout(
-            const Duration(seconds: 3),
+            const Duration(seconds: 4),
             onTimeout: () {},
           );
-
-          // Subscribe to role topic (student or staff)
-          if (role != null) {
-            await _messaging.subscribeToTopic('role_${role.name}').timeout(
-              const Duration(seconds: 3),
-              onTimeout: () {},
-            );
-          }
-
-          // Subscribe to sanitized username topic if provided
-          if (username != null && username.trim().isNotEmpty) {
-            final clean = username
-                .trim()
-                .replaceAll(RegExp(r'[^a-zA-Z0-9_-]'), '_')
-                .toLowerCase();
-            await _messaging.subscribeToTopic('user_name_$clean').timeout(
-              const Duration(seconds: 3),
-              onTimeout: () {},
-            );
-          }
         } catch (_) {}
 
         debugPrint(
           '✅ [FCM] Device token registered for uid: $uid (token: ${token.substring(0, 12)}...)',
         );
         return token;
+      } else if (defaultTargetPlatform == TargetPlatform.iOS) {
+        // On iOS, if APNs handshake is taking longer, retry in the background
+        Future.delayed(const Duration(seconds: 5), () {
+          if (_currentToken == null && _currentUserId == uid) {
+            registerUserDevice(uid, role: role, username: username);
+          }
+        });
+        Future.delayed(const Duration(seconds: 15), () {
+          if (_currentToken == null && _currentUserId == uid) {
+            registerUserDevice(uid, role: role, username: username);
+          }
+        });
       }
     } catch (e) {
       debugPrint('⚠️ [FCM] Error registering device token for $uid: $e');
@@ -581,14 +636,6 @@ class PushNotificationService {
   }) async {
     final title = 'New Meeting Request 📅';
     final body = '$studentName requested a meeting for "${meeting.purpose}".';
-    final data = {
-      'type': 'new_meeting_request',
-      'meetingId': meeting.id,
-      'studentName': studentName,
-      'purpose': meeting.purpose,
-      'facultyName': meeting.facultyName,
-      'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-    };
 
     // 1. Resolve staff UID
     var staffUid = meeting.facultyUid;
@@ -598,6 +645,17 @@ class PushNotificationService {
         email: meeting.facultyEmail,
       );
     }
+
+    final data = {
+      'type': 'new_meeting_request',
+      'meetingId': meeting.id,
+      'studentName': studentName,
+      'purpose': meeting.purpose,
+      'facultyName': meeting.facultyName,
+      'recipientUid': staffUid ?? '',
+      'senderUid': meeting.studentUid ?? _currentUserId ?? '',
+      'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+    };
 
     bool sentAny = false;
 
@@ -613,7 +671,7 @@ class PushNotificationService {
         if (success) sentAny = true;
       }
 
-      // Also dispatch to staff's personal user topic
+      // Also dispatch to staff's personal UID topic
       await sendFcmMessage(
         targetTopic: 'user_$staffUid',
         title: title,
@@ -622,17 +680,9 @@ class PushNotificationService {
       );
     }
 
-    // Also broadcast to staff role topic so all logged-in staff instances are aware
-    await sendFcmMessage(
-      targetTopic: 'role_staff',
-      title: title,
-      body: body,
-      data: data,
-    );
-
-    // When testing or on simulator, also trigger the heads-up notification
-    // banner on the current screen so the WhatsApp-style popup is immediately visible.
-    if (_currentUserId == staffUid || staffUid == null || kDebugMode || !sentAny) {
+    // Only display local notification on this device if the currently logged-in user
+    // on this device is the faculty recipient. (NEVER display to the student sender!)
+    if (_currentUserId != null && staffUid != null && _currentUserId == staffUid) {
       await showHeadsUpNotification(
         title: title,
         body: body,
@@ -672,17 +722,6 @@ class PushNotificationService {
     final body =
         '$staffName accepted your "${meeting.purpose}" request.$detailsStr';
 
-    final data = {
-      'type': 'meeting_accepted',
-      'meetingId': meeting.id,
-      'staffName': staffName,
-      'purpose': meeting.purpose,
-      'time': finalTime ?? '',
-      'location': finalLoc ?? '',
-      'status': 'accepted',
-      'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-    };
-
     // 1. Resolve student UID
     var studentUid = meeting.studentUid;
     if (studentUid == null || studentUid.isEmpty) {
@@ -691,6 +730,19 @@ class PushNotificationService {
         email: meeting.studentEmail,
       );
     }
+
+    final data = {
+      'type': 'meeting_accepted',
+      'meetingId': meeting.id,
+      'staffName': staffName,
+      'purpose': meeting.purpose,
+      'time': finalTime ?? '',
+      'location': finalLoc ?? '',
+      'status': 'accepted',
+      'recipientUid': studentUid ?? '',
+      'senderUid': meeting.facultyUid ?? _currentUserId ?? '',
+      'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+    };
 
     bool sentAny = false;
 
@@ -706,7 +758,7 @@ class PushNotificationService {
         if (success) sentAny = true;
       }
 
-      // Also dispatch to student's personal user topic
+      // Also dispatch to student's personal UID topic
       await sendFcmMessage(
         targetTopic: 'user_$studentUid',
         title: title,
@@ -715,9 +767,9 @@ class PushNotificationService {
       );
     }
 
-    // When testing or on simulator, also trigger the heads-up notification
-    // banner on the current screen so the WhatsApp-style popup is immediately visible.
-    if (_currentUserId == studentUid || studentUid == null || kDebugMode || !sentAny) {
+    // Only display local notification on this device if the currently logged-in user
+    // on this device is the student recipient. (NEVER display to the faculty sender!)
+    if (_currentUserId != null && studentUid != null && _currentUserId == studentUid) {
       await showHeadsUpNotification(
         title: title,
         body: body,
@@ -743,16 +795,6 @@ class PushNotificationService {
     final body =
         '$staffName declined your "${meeting.purpose}" request.$reasonStr';
 
-    final data = {
-      'type': 'meeting_rejected',
-      'meetingId': meeting.id,
-      'staffName': staffName,
-      'purpose': meeting.purpose,
-      'reason': reason ?? '',
-      'status': 'rejected',
-      'click_action': 'FLUTTER_NOTIFICATION_CLICK',
-    };
-
     var studentUid = meeting.studentUid;
     if (studentUid == null || studentUid.isEmpty) {
       studentUid = await _findUserId(
@@ -761,16 +803,32 @@ class PushNotificationService {
       );
     }
 
+    final data = {
+      'type': 'meeting_rejected',
+      'meetingId': meeting.id,
+      'staffName': staffName,
+      'purpose': meeting.purpose,
+      'reason': reason ?? '',
+      'status': 'rejected',
+      'recipientUid': studentUid ?? '',
+      'senderUid': meeting.facultyUid ?? _currentUserId ?? '',
+      'click_action': 'FLUTTER_NOTIFICATION_CLICK',
+    };
+
+    bool sentAny = false;
+
     if (studentUid != null && studentUid.isNotEmpty) {
       final tokens = await _getUserTokens(studentUid);
       for (final token in tokens) {
-        await sendFcmMessage(
+        final success = await sendFcmMessage(
           targetToken: token,
           title: title,
           body: body,
           data: data,
         );
+        if (success) sentAny = true;
       }
+
       await sendFcmMessage(
         targetTopic: 'user_$studentUid',
         title: title,
@@ -779,13 +837,19 @@ class PushNotificationService {
       );
     }
 
-    if (_currentUserId == studentUid || studentUid == null) {
+    // Only display local notification on this device if the currently logged-in user
+    // on this device is the student recipient. (NEVER display to the faculty sender!)
+    if (_currentUserId != null && studentUid != null && _currentUserId == studentUid) {
       await showHeadsUpNotification(
         title: title,
         body: body,
         data: data,
       );
     }
+
+    debugPrint(
+      '🔔 [FCM] Meeting rejected push dispatched: studentUid=$studentUid (sentToTokens=$sentAny)',
+    );
   }
 }
 

@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 
 import '../../../backend/auth_service.dart';
 import '../../../backend/meeting_service.dart';
+import '../../../backend/push_notification_service.dart';
 import '../../student/models/meeting.dart';
 import '../theme/staff_theme.dart';
 import 'staff_history_page.dart';
@@ -35,6 +36,22 @@ class _StaffHomePageState extends State<StaffHomePage> {
     super.initState();
     _loadMeetings();
     _subscribeToMeetings();
+    _registerPushToken();
+  }
+
+  Future<void> _registerPushToken() async {
+    try {
+      final user = await _authService.getCurrentUser();
+      if (user != null) {
+        await PushNotificationService().registerUserDevice(
+          user.uid,
+          role: UserRole.staff,
+          username: user.username,
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [StaffHome] Error registering push: $e');
+    }
   }
 
   @override

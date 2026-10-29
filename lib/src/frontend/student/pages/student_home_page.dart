@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 
 import '../../../backend/auth_service.dart';
+import '../../../backend/push_notification_service.dart';
 import '../models/meeting.dart';
 import '../services/storage_service.dart';
 import '../theme/student_theme.dart';
@@ -29,11 +31,107 @@ class _StudentHomePageState extends State<StudentHomePage> {
   final AuthService _authService = AuthService();
   bool _isLoading = true;
   String _studentName = 'Student';
+  StreamSubscription<List<Meeting>>? _meetingSubscription;
+  final Map<String, MeetingStatus> _previousStatuses = {};
+  bool _isFirstSnapshot = true;
 
   @override
   void initState() {
     super.initState();
     _loadMeetings();
+    _subscribeToMeetings();
+    _registerPushToken();
+  }
+
+  @override
+  void dispose() {
+    _meetingSubscription?.cancel();
+    super.dispose();
+  }
+
+  void _subscribeToMeetings() {
+    _meetingSubscription?.cancel();
+    _meetingSubscription = _storageService
+        .streamMeetingsForCurrentStudent()
+        .listen((streamed) {
+      if (!mounted) return;
+
+      for (final m in streamed) {
+        final prev = _previousStatuses[m.id];
+        if (!_isFirstSnapshot && prev != null && prev != m.status) {
+          if (m.status == MeetingStatus.accepted) {
+            final detailsList = <String>[];
+            if (m.time != null && m.time!.trim().isNotEmpty) {
+              detailsList.add('Time: ${m.time!.trim()}');
+            }
+            if (m.location != null && m.location!.trim().isNotEmpty) {
+              detailsList.add('Venue: ${m.location!.trim()}');
+            }
+            final detailsStr = detailsList.isNotEmpty
+                ? ' (${detailsList.join(" · ")})'
+                : '';
+            PushNotificationService().showHeadsUpNotification(
+              title: 'Meeting Accepted! 🎉',
+              body:
+                  '${m.facultyName} accepted your "${m.purpose}" request.$detailsStr',
+              data: {
+                'type': 'meeting_accepted',
+                'meetingId': m.id,
+                'status': 'accepted',
+              },
+            );
+          } else if (m.status == MeetingStatus.rejected) {
+            final reasonStr = (m.denialReason != null &&
+                    m.denialReason!.isNotEmpty &&
+                    m.denialReason != 'Rejected by faculty')
+                ? ' Reason: ${m.denialReason}'
+                : '';
+            PushNotificationService().showHeadsUpNotification(
+              title: 'Meeting Declined',
+              body:
+                  '${m.facultyName} declined your "${m.purpose}" request.$reasonStr',
+              data: {
+                'type': 'meeting_rejected',
+                'meetingId': m.id,
+                'status': 'rejected',
+              },
+            );
+          }
+        }
+        _previousStatuses[m.id] = m.status;
+      }
+      _isFirstSnapshot = false;
+
+      final sorted = List<Meeting>.from(streamed);
+      sorted.sort((a, b) {
+        if (a.isPinned && !b.isPinned) return -1;
+        if (!a.isPinned && b.isPinned) return 1;
+        if (a.createdAt != null && b.createdAt != null) {
+          return b.createdAt!.compareTo(a.createdAt!);
+        }
+        return b.requestedAt.compareTo(a.requestedAt);
+      });
+
+      setState(() {
+        meetings = sorted;
+        _isLoading = false;
+      });
+    });
+  }
+
+  Future<void> _registerPushToken() async {
+    try {
+      final user = await _authService.getCurrentUser();
+      if (user != null) {
+        await PushNotificationService().registerUserDevice(
+          user.uid,
+          role: UserRole.student,
+          username: user.username,
+        );
+      }
+    } catch (e) {
+      debugPrint('⚠️ [StudentHome] Error registering push: $e');
+    }
   }
 
   Future<void> _loadMeetings() async {
